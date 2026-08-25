@@ -8,10 +8,10 @@ UI_BINARY=$APP_DIR/frigotehnica-tunnel-ui
 CLOUDFLARED_BINARY=$APP_DIR/cloudflared
 TUNNEL_SERVICE=cloudflared-frigotehnica
 UI_SERVICE=frigotehnica-tunnel-ui
-UI_ASSET=frigotehnica-tunnel-ui-linux-armv7
-CLOUDFLARED_ASSET=cloudflared-linux-armhf-2026.8.2
-UI_SHA256=695557831093239b92744afa1295d481c043d64b44c1e86cf0c6169caf78b9be
-CLOUDFLARED_SHA256=8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5
+UI_ARMV7_SHA256=695557831093239b92744afa1295d481c043d64b44c1e86cf0c6169caf78b9be
+UI_AMD64_SHA256=PINNED_BY_RELEASE_WORKFLOW
+CLOUDFLARED_ARMV7_SHA256=8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5
+CLOUDFLARED_AMD64_SHA256=fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2
 RELEASE_BASE_URL=${FRIGOTEHNICA_RELEASE_BASE_URL:-https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.0.0}
 LISTEN_ADDRESS=
 SITE_NAME="BOSS Site"
@@ -60,7 +60,21 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ "$(id -u)" -eq 0 ] || die "run this installer as root"
-[ "$(uname -m)" = "armv7l" ] || die "this release supports ARMv7 only; detected $(uname -m)"
+case "$(uname -m)" in
+	armv7l|armv7*)
+		UI_ASSET=frigotehnica-tunnel-ui-linux-armv7
+		UI_SHA256=$UI_ARMV7_SHA256
+		CLOUDFLARED_ASSET=cloudflared-linux-armhf-2026.8.2
+		CLOUDFLARED_SHA256=$CLOUDFLARED_ARMV7_SHA256
+		;;
+	x86_64|amd64)
+		UI_ASSET=frigotehnica-tunnel-ui-linux-amd64
+		UI_SHA256=$UI_AMD64_SHA256
+		CLOUDFLARED_ASSET=cloudflared-linux-amd64-2026.8.2
+		CLOUDFLARED_SHA256=$CLOUDFLARED_AMD64_SHA256
+		;;
+	*) die "unsupported architecture: $(uname -m); supported: ARMv7 and x86_64" ;;
+esac
 command -v rc-service >/dev/null 2>&1 || die "OpenRC rc-service is required"
 command -v rc-update >/dev/null 2>&1 || die "OpenRC rc-update is required"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
