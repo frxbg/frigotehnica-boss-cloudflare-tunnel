@@ -36,6 +36,15 @@ After installation, open:
 http://DEVICE_IP:9080
 ```
 
+## Legacy CA certificates
+
+Some older Carel BOSS systems have an outdated CA certificate bundle and
+cannot validate GitHub's HTTPS certificate. Do not pipe an unverified download
+directly into a root shell. Each release provides a pinned one-line command for
+these devices: it downloads the installer in legacy TLS mode, verifies its
+exact SHA-256 digest, and only then runs it. Downloaded program binaries are
+also checked against the SHA-256 values embedded in the verified installer.
+
 ## Custom installation
 
 ```sh
