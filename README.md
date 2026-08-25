@@ -5,6 +5,7 @@ Secure Cloudflare Tunnel installer and local management UI for ARMv7 and x86_64 
 ## Features
 
 - One-line installation
+- Non-interactive bootstrap for restricted browser terminals
 - Official Cloudflare `cloudflared` binary
 - SHA-256 verification
 - Remotely managed Cloudflare Tunnel
@@ -35,6 +36,22 @@ After installation, open:
 ```text
 http://DEVICE_IP:9080
 ```
+
+## Non-interactive installation
+
+For browser terminals that cannot provide interactive input, run:
+
+```sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive
+```
+
+The installer prints a random one-time UI password. Open the local panel on
+port `9080`, sign in with that password, and replace it when prompted. After
+the password change, paste the Cloudflare tunnel token in **Token management**.
+The tunnel service starts automatically after the token is saved.
+
+The non-interactive mode never creates an unauthenticated panel and never uses
+a shared default password.
 
 ## Legacy CA certificates
 
@@ -98,6 +115,7 @@ sudo rc-service frigotehnica-tunnel-ui restart
 ## Security
 
 - Tokens and passwords are never accepted as command-line arguments.
+- Non-interactive installs generate a unique one-time password and require its replacement.
 - Secrets are read interactively from `/dev/tty`.
 - The tunnel token and password hash are stored with mode `0600`.
 - The UI does not accept arbitrary shell commands.
@@ -134,4 +152,3 @@ Use only on devices you own or are explicitly authorized to administer.
 ## License
 
 MIT
-
