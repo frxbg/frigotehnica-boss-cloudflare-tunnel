@@ -39,9 +39,9 @@ const (
 )
 
 type config struct {
-	listen, authFile, tokenFile, cloudflared, service, logFile string
-	siteName, hostname                                         string
-	demo                                                       bool
+	listen, authFile, bootstrapFile, tokenFile, cloudflared, service, logFile string
+	siteName, hostname                                                        string
+	demo, demoBootstrap                                                       bool
 }
 
 type session struct {
@@ -60,25 +60,27 @@ type server struct {
 }
 
 type statusResponse struct {
-	State         string   `json:"state"`
-	StateLabel    string   `json:"stateLabel"`
-	SiteName      string   `json:"siteName"`
-	Hostname      string   `json:"hostname"`
-	Version       string   `json:"version"`
-	Architecture  string   `json:"architecture"`
-	Uptime        string   `json:"uptime"`
-	LastCheck     string   `json:"lastCheck"`
-	Connections   int      `json:"connections"`
-	TokenPresent  bool     `json:"tokenPresent"`
-	OriginOK      bool     `json:"originOK"`
-	Diagnostics   []string `json:"diagnostics"`
-	ServiceDetail string   `json:"serviceDetail"`
+	State                  string   `json:"state"`
+	StateLabel             string   `json:"stateLabel"`
+	SiteName               string   `json:"siteName"`
+	Hostname               string   `json:"hostname"`
+	Version                string   `json:"version"`
+	Architecture           string   `json:"architecture"`
+	Uptime                 string   `json:"uptime"`
+	LastCheck              string   `json:"lastCheck"`
+	Connections            int      `json:"connections"`
+	TokenPresent           bool     `json:"tokenPresent"`
+	OriginOK               bool     `json:"originOK"`
+	Diagnostics            []string `json:"diagnostics"`
+	ServiceDetail          string   `json:"serviceDetail"`
+	PasswordChangeRequired bool     `json:"passwordChangeRequired"`
 }
 
 func main() {
 	var cfg config
 	flag.StringVar(&cfg.listen, "listen", "127.0.0.1:9080", "listen address")
 	flag.StringVar(&cfg.authFile, "auth-file", "/opt/frigotehnica/config/admin.auth", "admin password hash file")
+	flag.StringVar(&cfg.bootstrapFile, "bootstrap-file", "/opt/frigotehnica/config/bootstrap.required", "one-time password marker file")
 	flag.StringVar(&cfg.tokenFile, "token-file", "/opt/frigotehnica/config/tunnel.token", "Cloudflare token file")
 	flag.StringVar(&cfg.cloudflared, "cloudflared", "/opt/frigotehnica/cloudflared", "cloudflared binary")
 	flag.StringVar(&cfg.service, "service", "cloudflared-frigotehnica", "OpenRC service")
@@ -86,7 +88,17 @@ func main() {
 	flag.StringVar(&cfg.siteName, "site-name", "BOSS Test", "displayed site name")
 	flag.StringVar(&cfg.hostname, "hostname", "boss-test.frigotehnica.dpdns.org", "displayed public hostname")
 	flag.BoolVar(&cfg.demo, "demo", false, "local visual QA mode")
+	flag.BoolVar(&cfg.demoBootstrap, "demo-bootstrap", false, "show forced password setup in demo mode")
 	flag.Parse()
+
+	if flag.NArg() == 1 && flag.Arg(0) == "generate-password" {
+		password, err := randomHex(12)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(password)
+		return
+	}
 
 	if flag.NArg() == 1 && flag.Arg(0) == "hash-password" {
 		password, err := io.ReadAll(io.LimitReader(os.Stdin, 1024))
@@ -118,6 +130,7 @@ func main() {
 	mux.HandleFunc("POST /api/check", s.requireAuth(s.requireCSRF(s.check)))
 	mux.HandleFunc("POST /api/service/{action}", s.requireAuth(s.requireCSRF(s.serviceAction)))
 	mux.HandleFunc("POST /api/token", s.requireAuth(s.requireCSRF(s.updateToken)))
+	mux.HandleFunc("POST /api/password", s.requireAuth(s.requireCSRF(s.updatePassword)))
 
 	h := securityHeaders(http.MaxBytesHandler(mux, maxBody))
 	httpServer := &http.Server{Addr: cfg.listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
@@ -154,7 +167,7 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	_ = s.tpl.ExecuteTemplate(w, "login.html", map[string]any{"Error": r.URL.Query().Get("error") != ""})
+	_ = s.tpl.ExecuteTemplate(w, "login.html", map[string]any{"Error": r.URL.Query().Get("error") != "", "Bootstrap": s.passwordChangeRequired()})
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
@@ -307,9 +320,28 @@ func (s *server) collectStatus(ctx context.Context) statusResponse {
 		}
 	}
 	connections, diagnostics := safeDiagnostics(s.cfg.logFile, s.cfg.demo)
-	_, tokenErr := os.Stat(s.cfg.tokenFile)
+	tokenPresent := filePresent(s.cfg.tokenFile)
+	if !tokenPresent {
+		state, label, detail = "disconnected", "Not configured", "Waiting for Cloudflare tunnel token"
+		connections = 0
+		diagnostics = []string{"Configure the Cloudflare tunnel token to start the service."}
+	}
 	originOK := probeOrigin()
-	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: humanDuration(time.Since(s.started)), LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenErr == nil, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail}
+	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: humanDuration(time.Since(s.started)), LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: s.passwordChangeRequired()}
+}
+
+func filePresent(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Size() > 0
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func (s *server) passwordChangeRequired() bool {
+	return s.cfg.demoBootstrap || fileExists(s.cfg.bootstrapFile)
 }
 
 func probeOrigin() bool {
@@ -326,6 +358,14 @@ func (s *server) serviceAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	if action != "start" && action != "restart" && action != "stop" {
 		http.Error(w, "invalid action", http.StatusBadRequest)
+		return
+	}
+	if s.passwordChangeRequired() {
+		http.Error(w, "Change the one-time administrator password first", http.StatusPreconditionRequired)
+		return
+	}
+	if action != "stop" && !filePresent(s.cfg.tokenFile) && !s.cfg.demo {
+		http.Error(w, "Configure the Cloudflare tunnel token first", http.StatusPreconditionRequired)
 		return
 	}
 	if action == "stop" {
@@ -352,6 +392,10 @@ func (s *server) serviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
+	if s.passwordChangeRequired() {
+		http.Error(w, "Change the one-time administrator password first", http.StatusPreconditionRequired)
+		return
+	}
 	var body struct {
 		Token string `json:"token"`
 	}
@@ -395,11 +439,79 @@ func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, "restart").Run(); err != nil {
+	action := "restart"
+	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, "status").Run(); err != nil {
+		action = "start"
+	}
+	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, action).Run(); err != nil {
 		http.Error(w, "The token was saved, but the restart failed", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *server) updatePassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Current  string `json:"current"`
+		Password string `json:"password"`
+		Confirm  string `json:"confirm"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body.Password) < 12 || len(body.Password) > 256 || body.Password != body.Confirm || body.Password == body.Current {
+		http.Error(w, "The new password must match, differ from the current password, and contain at least 12 characters", http.StatusBadRequest)
+		return
+	}
+	valid := s.cfg.demo && subtle.ConstantTimeCompare([]byte(body.Current), []byte("DemoPassword1234")) == 1
+	var err error
+	if !s.cfg.demo {
+		valid, err = verifyPasswordFile(s.cfg.authFile, []byte(body.Current))
+	}
+	if err != nil || !valid {
+		http.Error(w, "The current password is incorrect", http.StatusForbidden)
+		return
+	}
+	encoded, err := makePasswordHash([]byte(body.Password))
+	if err != nil || (!s.cfg.demo && writeSecretFile(s.cfg.authFile, encoded+"\n") != nil) {
+		http.Error(w, "The password could not be saved", http.StatusInternalServerError)
+		return
+	}
+	if !s.cfg.demo {
+		if err := os.Remove(s.cfg.bootstrapFile); err != nil && !os.IsNotExist(err) {
+			http.Error(w, "The password was saved, but setup could not be completed", http.StatusInternalServerError)
+			return
+		}
+	}
+	s.mu.Lock()
+	s.sessions = map[string]session{}
+	s.mu.Unlock()
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func writeSecretFile(path, value string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".secret-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err = tmp.Chmod(0600); err == nil {
+		_, err = tmp.WriteString(value)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	closeErr := tmp.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tmpName, path)
+	}
+	return err
 }
 
 var tokenLike = regexp.MustCompile(`(?i)(token[=: ]+)[^ ]+|eyJ[A-Za-z0-9_.-]{40,}`)
