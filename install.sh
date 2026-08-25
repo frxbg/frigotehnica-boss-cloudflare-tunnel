@@ -15,7 +15,7 @@ CLOUDFLARED_AMD64_SHA256=fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed
 RELEASE_BASE_URL=${FRIGOTEHNICA_RELEASE_BASE_URL:-https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download}
 LISTEN_ADDRESS=
 SITE_NAME="BOSS Site"
-PUBLIC_HOSTNAME="Not configured"
+PUBLIC_HOSTNAME="not-configured"
 TOKEN_FILE_SOURCE=
 ENABLE_BOOT=yes
 START_SERVICES=yes
@@ -275,3 +275,4 @@ if [ "$START_SERVICES" = yes ]; then
 fi
 
 info "Installation completed"
+
