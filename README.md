@@ -45,9 +45,14 @@ these devices: it downloads the installer in legacy TLS mode, verifies its
 exact SHA-256 digest, and only then runs it. Downloaded program binaries are
 also checked against the SHA-256 values embedded in the verified installer.
 
-Copy the version-specific legacy command from the latest release notes. Its
-installer digest is pinned to that release and must not be reused for a newer
-version.
+For `v1.0.2`, use this exact command:
+
+```sh
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.0.2/install.sh -o /tmp/frigotehnica-install-v1.0.2.sh && echo '9f65de71e1954d48115720245b7f9f4cf3ed1fe6874f52ee11edf19cab446b3e  /tmp/frigotehnica-install-v1.0.2.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.0.2.sh
+```
+
+The installer digest is pinned to this release and must not be reused for a
+newer version.
 
 ## Custom installation
 
@@ -129,3 +134,4 @@ Use only on devices you own or are explicitly authorized to administer.
 ## License
 
 MIT
+
