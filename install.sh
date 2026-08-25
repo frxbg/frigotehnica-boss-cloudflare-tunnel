@@ -155,6 +155,7 @@ fetch_asset "$UI_ASSET" "$STAGE_DIR/$UI_ASSET"
 fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
 verify_asset "$STAGE_DIR/$UI_ASSET" "$UI_SHA256"
 verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
+chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
 info "Release asset checksums verified"
 
 if [ -e "$UI_BINARY" ] || [ -e /etc/init.d/$UI_SERVICE ] || [ -e /etc/init.d/$TUNNEL_SERVICE ]; then
