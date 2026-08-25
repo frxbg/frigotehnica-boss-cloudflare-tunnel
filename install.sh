@@ -20,6 +20,8 @@ TOKEN_FILE_SOURCE=
 ENABLE_BOOT=yes
 START_SERVICES=yes
 INSECURE_DOWNLOADS=${FRIGOTEHNICA_INSECURE_DOWNLOADS:-no}
+NON_INTERACTIVE=no
+BOOTSTRAP_PASSWORD=
 
 usage() {
 	cat <<'EOF'
@@ -33,13 +35,14 @@ Options:
   --site-name NAME         Displayed site name
   --hostname HOSTNAME      Displayed Cloudflare public hostname
   --token-file PATH        Read tunnel token from a protected local file
+  --non-interactive        Install UI without prompting; print a one-time password
   --release-base-url URL   Download missing release assets from URL
   --no-enable              Do not add services to the OpenRC default runlevel
   --no-start               Install files without starting services
   --help                   Show this help
 
-Secrets are never accepted as command-line arguments. If --token-file is not
-provided, the installer reads the token securely from /dev/tty.
+Secrets are never accepted as command-line arguments. In non-interactive mode,
+configure the token and replace the generated one-time password in the UI.
 EOF
 }
 
@@ -52,6 +55,7 @@ while [ "$#" -gt 0 ]; do
 		--site-name) [ "$#" -ge 2 ] || die "--site-name requires a value"; SITE_NAME=$2; shift 2 ;;
 		--hostname) [ "$#" -ge 2 ] || die "--hostname requires a value"; PUBLIC_HOSTNAME=$2; shift 2 ;;
 		--token-file) [ "$#" -ge 2 ] || die "--token-file requires a value"; TOKEN_FILE_SOURCE=$2; shift 2 ;;
+		--non-interactive) NON_INTERACTIVE=yes; shift ;;
 		--release-base-url) [ "$#" -ge 2 ] || die "--release-base-url requires a value"; RELEASE_BASE_URL=${2%/}; shift 2 ;;
 		--no-enable) ENABLE_BOOT=no; shift ;;
 		--no-start) START_SERVICES=no; shift ;;
@@ -172,6 +176,8 @@ if [ -n "$TOKEN_FILE_SOURCE" ]; then
 elif [ -s "$CONFIG_DIR/tunnel.token" ]; then
 	cp "$CONFIG_DIR/tunnel.token" "$STAGE_DIR/tunnel.token"
 	info "Existing Cloudflare tunnel token retained"
+elif [ "$NON_INTERACTIVE" = yes ]; then
+	info "Cloudflare tunnel token will be configured in the web interface"
 else
 	[ -r /dev/tty ] || die "interactive token entry requires /dev/tty or --token-file"
 	printf "Cloudflare tunnel token: " > /dev/tty
@@ -188,6 +194,10 @@ fi
 if [ -s "$CONFIG_DIR/admin.auth" ]; then
 	cp "$CONFIG_DIR/admin.auth" "$STAGE_DIR/admin.auth"
 	info "Existing UI administrator password retained"
+elif [ "$NON_INTERACTIVE" = yes ]; then
+	BOOTSTRAP_PASSWORD=$("$STAGE_DIR/$UI_ASSET" generate-password)
+	printf '%s\n' "$BOOTSTRAP_PASSWORD" | "$STAGE_DIR/$UI_ASSET" hash-password > "$STAGE_DIR/admin.auth"
+	: > "$STAGE_DIR/bootstrap.required"
 else
 	[ -r /dev/tty ] || die "interactive password entry requires /dev/tty"
 	printf "New UI administrator password (12+ characters): " > /dev/tty
@@ -232,7 +242,7 @@ cat > "$STAGE_DIR/$UI_SERVICE" <<EOF
 #!/sbin/openrc-run
 description="Local Frigotehnica Cloudflare Tunnel control panel"
 command="/opt/frigotehnica/frigotehnica-tunnel-ui"
-command_args="-listen $listen_escaped -auth-file /opt/frigotehnica/config/admin.auth -token-file /opt/frigotehnica/config/tunnel.token -cloudflared /opt/frigotehnica/cloudflared -service cloudflared-frigotehnica -log-file /opt/frigotehnica/logs/cloudflared.log -site-name '$site_escaped' -hostname '$hostname_escaped'"
+command_args="-listen $listen_escaped -auth-file /opt/frigotehnica/config/admin.auth -bootstrap-file /opt/frigotehnica/config/bootstrap.required -token-file /opt/frigotehnica/config/tunnel.token -cloudflared /opt/frigotehnica/cloudflared -service cloudflared-frigotehnica -log-file /opt/frigotehnica/logs/cloudflared.log -site-name '$site_escaped' -hostname '$hostname_escaped'"
 command_background=true
 pidfile="/var/run/frigotehnica-tunnel-ui.pid"
 output_log="/opt/frigotehnica/logs/tunnel-ui.log"
@@ -251,8 +261,13 @@ if rc-service "$TUNNEL_SERVICE" status >/dev/null 2>&1; then rc-service "$TUNNEL
 
 install -m 0755 "$STAGE_DIR/$UI_ASSET" "$UI_BINARY"
 install -m 0755 "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_BINARY"
-install -m 0600 "$STAGE_DIR/tunnel.token" "$CONFIG_DIR/tunnel.token"
+if [ -s "$STAGE_DIR/tunnel.token" ]; then
+	install -m 0600 "$STAGE_DIR/tunnel.token" "$CONFIG_DIR/tunnel.token"
+fi
 install -m 0600 "$STAGE_DIR/admin.auth" "$CONFIG_DIR/admin.auth"
+if [ -e "$STAGE_DIR/bootstrap.required" ]; then
+	install -m 0600 "$STAGE_DIR/bootstrap.required" "$CONFIG_DIR/bootstrap.required"
+fi
 install -m 0755 "$STAGE_DIR/$TUNNEL_SERVICE" /etc/init.d/$TUNNEL_SERVICE
 install -m 0755 "$STAGE_DIR/$UI_SERVICE" /etc/init.d/$UI_SERVICE
 
@@ -263,9 +278,13 @@ if [ "$ENABLE_BOOT" = yes ]; then
 fi
 
 if [ "$START_SERVICES" = yes ]; then
-	rc-service "$TUNNEL_SERVICE" start
-	sleep 5
-	rc-service "$TUNNEL_SERVICE" status >/dev/null 2>&1 || die "tunnel service did not start"
+	if [ -s "$CONFIG_DIR/tunnel.token" ]; then
+		rc-service "$TUNNEL_SERVICE" start
+		sleep 5
+		rc-service "$TUNNEL_SERVICE" status >/dev/null 2>&1 || die "tunnel service did not start"
+	else
+		info "Tunnel service will start after the token is configured in the UI"
+	fi
 	rc-service "$UI_SERVICE" start
 	sleep 2
 	rc-service "$UI_SERVICE" status >/dev/null 2>&1 || die "UI service did not start"
@@ -276,4 +295,11 @@ if [ "$START_SERVICES" = yes ]; then
 fi
 
 info "Installation completed"
-
+if [ -n "$BOOTSTRAP_PASSWORD" ]; then
+	echo
+	echo "============================================================"
+	echo "ONE-TIME UI PASSWORD: $BOOTSTRAP_PASSWORD"
+	echo "Open http://$LISTEN_ADDRESS and change this password first."
+	echo "Then configure the Cloudflare tunnel token in the UI."
+	echo "============================================================"
+fi
