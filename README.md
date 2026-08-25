@@ -1,6 +1,6 @@
 # Frigotehnica BOSS Cloudflare Tunnel
 
-Secure Cloudflare Tunnel installer and local management UI for ARMv7 Carel BOSS devices running Gentoo/OpenRC.
+Secure Cloudflare Tunnel installer and local management UI for ARMv7 and x86_64 Carel BOSS devices running Gentoo/OpenRC.
 
 ## Features
 
@@ -20,7 +20,7 @@ Secure Cloudflare Tunnel installer and local management UI for ARMv7 Carel BOSS 
 Run as a user with `sudo` access:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/frxbg/frigotehnica-boss-cloudflare-tunnel/main/install.sh | sudo sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.0.0/install.sh | sudo sh
 ```
 
 The installer securely prompts for:
@@ -39,7 +39,7 @@ http://DEVICE_IP:9080
 ## Custom installation
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/frxbg/frigotehnica-boss-cloudflare-tunnel/main/install.sh \
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.0.0/install.sh \
   | sudo sh -s -- \
     --listen 192.168.0.177:9080 \
     --site-name "BOSS Test" \
@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/frxbg/frigotehnica-boss-cloudflare-
 ## Requirements
 
 - Carel BOSS or compatible embedded Linux device
-- ARMv7 hard-float architecture
+- ARMv7 hard-float or x86_64 architecture
 - Gentoo Linux with OpenRC
 - Root or sudo access
 - Outbound HTTPS and Cloudflare Tunnel connectivity
@@ -101,7 +101,7 @@ The uninstaller retains secrets and logs so they are not destroyed accidentally.
 The current release targets:
 
 ```text
-Architecture: ARMv7 hard-float
+Architecture: ARMv7 hard-float or x86_64
 Operating system: Gentoo Linux
 Init system: OpenRC
 Tested device: Carel BOSS
