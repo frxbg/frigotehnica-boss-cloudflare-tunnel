@@ -25,23 +25,37 @@ jobs:
           GOARCH: arm
           GOARM: "7"
         run: go build -trimpath -ldflags "-s -w" -o frigotehnica-tunnel-ui-linux-armv7 .
+      - name: Build x86_64 UI
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -trimpath -ldflags "-s -w" -o frigotehnica-tunnel-ui-linux-amd64 .
       - name: Download and verify cloudflared
         run: |
           curl -fL --proto '=https' --tlsv1.2 \
             -o cloudflared-linux-armhf-2026.8.2 \
             https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-armhf
+          curl -fL --proto '=https' --tlsv1.2 \
+            -o cloudflared-linux-amd64-2026.8.2 \
+            https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-amd64
           echo "8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5  cloudflared-linux-armhf-2026.8.2" | sha256sum -c -
+          echo "fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2  cloudflared-linux-amd64-2026.8.2" | sha256sum -c -
       - name: Pin installer checksum to this build
         run: |
-          ui_sha=$(sha256sum frigotehnica-tunnel-ui-linux-armv7 | awk '{print $1}')
-          sed -i "s/^UI_SHA256=.*/UI_SHA256=$ui_sha/" install.sh
+          arm_sha=$(sha256sum frigotehnica-tunnel-ui-linux-armv7 | awk '{print $1}')
+          amd64_sha=$(sha256sum frigotehnica-tunnel-ui-linux-amd64 | awk '{print $1}')
+          sed -i "s/^UI_ARMV7_SHA256=.*/UI_ARMV7_SHA256=$arm_sha/" install.sh
+          sed -i "s/^UI_AMD64_SHA256=.*/UI_AMD64_SHA256=$amd64_sha/" install.sh
       - name: Checksums
-        run: sha256sum frigotehnica-tunnel-ui-linux-armv7 cloudflared-linux-armhf-2026.8.2 install.sh uninstall.sh > SHA256SUMS
+        run: sha256sum frigotehnica-tunnel-ui-linux-armv7 frigotehnica-tunnel-ui-linux-amd64 cloudflared-linux-armhf-2026.8.2 cloudflared-linux-amd64-2026.8.2 install.sh uninstall.sh > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             frigotehnica-tunnel-ui-linux-armv7
+            frigotehnica-tunnel-ui-linux-amd64
             cloudflared-linux-armhf-2026.8.2
+            cloudflared-linux-amd64-2026.8.2
             install.sh
             uninstall.sh
             SHA256SUMS
