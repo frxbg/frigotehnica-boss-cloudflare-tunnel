@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+
+description="Local Frigotehnica Cloudflare Tunnel control panel"
+command="/opt/frigotehnica/frigotehnica-tunnel-ui"
+command_args="-listen 192.168.0.177:9080 -auth-file /opt/frigotehnica/config/admin.auth -token-file /opt/frigotehnica/config/tunnel.token -cloudflared /opt/frigotehnica/cloudflared -service cloudflared-frigotehnica -log-file /opt/frigotehnica/logs/cloudflared.log -site-name 'BOSS Test' -hostname boss-test.frigotehnica.dpdns.org"
+command_background=true
+pidfile="/var/run/frigotehnica-tunnel-ui.pid"
+output_log="/opt/frigotehnica/logs/tunnel-ui.log"
+error_log="/opt/frigotehnica/logs/tunnel-ui.log"
+retry="TERM/10/KILL/5"
+
+depend() {
+	need localmount
+	use net logger
+	after cloudflared-frigotehnica
+}
+
+start_pre() {
+	if [ ! -x "${command}" ]; then
+		eerror "Missing Tunnel Control binary"
+		return 1
+	fi
+	if [ ! -s /opt/frigotehnica/config/admin.auth ]; then
+		eerror "Missing admin authentication file"
+		return 1
+	fi
+	touch "${output_log}" || return 1
+	chmod 0600 "${output_log}" || return 1
+}
