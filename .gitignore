@@ -1,0 +1,5 @@
+/dist/
+/release/
+*.token
+*password*
+
