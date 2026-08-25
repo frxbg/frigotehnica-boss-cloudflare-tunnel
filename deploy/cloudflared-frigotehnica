@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+
+description="Cloudflare Tunnel for Carel BOSS"
+command="/opt/frigotehnica/cloudflared"
+command_args="tunnel --no-autoupdate --loglevel info --logfile /opt/frigotehnica/logs/cloudflared.log run --token-file /opt/frigotehnica/config/tunnel.token"
+command_background=true
+pidfile="/var/run/cloudflared-frigotehnica.pid"
+output_log="/opt/frigotehnica/logs/cloudflared.log"
+error_log="/opt/frigotehnica/logs/cloudflared.log"
+retry="TERM/15/KILL/5"
+
+depend() {
+	need net
+	use dns logger
+	after localmount
+}
+
+start_pre() {
+	if [ ! -x "${command}" ]; then
+		eerror "Missing cloudflared binary"
+		return 1
+	fi
+	if [ ! -s /opt/frigotehnica/config/tunnel.token ]; then
+		eerror "Missing tunnel token"
+		return 1
+	fi
+	touch "${output_log}" || return 1
+	chmod 0600 "${output_log}" || return 1
+}
