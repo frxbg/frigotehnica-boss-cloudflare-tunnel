@@ -19,6 +19,7 @@ PUBLIC_HOSTNAME="Not configured"
 TOKEN_FILE_SOURCE=
 ENABLE_BOOT=yes
 START_SERVICES=yes
+INSECURE_DOWNLOADS=${FRIGOTEHNICA_INSECURE_DOWNLOADS:-no}
 
 usage() {
 	cat <<'EOF'
@@ -130,8 +131,14 @@ fetch_asset() {
 	elif [ -n "$RELEASE_BASE_URL" ]; then
 		command -v curl >/dev/null 2>&1 || die "curl is required to download release assets"
 		info "Downloading $asset"
-		curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
-			-o "$destination" "$RELEASE_BASE_URL/$asset"
+		if [ "$INSECURE_DOWNLOADS" = yes ]; then
+			info "Legacy CA mode: TLS certificate verification is disabled; SHA-256 verification remains mandatory"
+			curl -kfL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+				-o "$destination" "$RELEASE_BASE_URL/$asset"
+		else
+			curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+				-o "$destination" "$RELEASE_BASE_URL/$asset"
+		fi
 	else
 		die "$asset is missing; place it next to install.sh or pass --release-base-url"
 	fi
