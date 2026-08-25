@@ -62,6 +62,10 @@ these devices: it downloads the installer in legacy TLS mode, verifies its
 exact SHA-256 digest, and only then runs it. Downloaded program binaries are
 also checked against the SHA-256 values embedded in the verified installer.
 
+```sh
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.1.0/install.sh -o /tmp/frigotehnica-install-v1.1.0.sh && echo 'e337c4301abcc405a0e253382269f090e6b449a5db69be9151e483e286a2b9d7  /tmp/frigotehnica-install-v1.1.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.1.0.sh --non-interactive
+```
+
 For `v1.0.2`, use this exact command:
 
 ```sh
