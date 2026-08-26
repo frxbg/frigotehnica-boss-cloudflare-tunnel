@@ -254,8 +254,25 @@ stage_ajenti_plugin() {
 	plugin_stage=$STAGE_DIR/ajenti_plugin_frigotehnica
 	install -d -m 0755 "$plugin_stage/resources"
 if [ "$AJENTI_VARIANT" = carel-boss ]; then
-	cat > "$plugin_stage/__init__.py" <<'PY'
-import main
+	cat > "$plugin_stage/views.py" <<'PY'
+from jadi import component
+from aj.api.http import url, HttpPlugin
+from aj.api.endpoint import endpoint
+
+
+@component(HttpPlugin)
+class FrigotehnicaTestHandler(HttpPlugin):
+    def __init__(self, context):
+        self.context = context
+
+    @url(r'/api/frigotehnica/ping')
+    @endpoint(api=True, auth=True)
+    def handle_ping(self, http_context):
+        return {
+            'ok': True,
+            'plugin': 'frigotehnica',
+            'message': 'CAREL Ajenti HTTP plugin is working'
+        }
 PY
 else
 	cat > "$plugin_stage/__init__.py" <<'PY'
