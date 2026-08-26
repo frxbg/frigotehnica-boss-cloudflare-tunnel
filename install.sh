@@ -28,6 +28,7 @@ AJENTI_PYTHON=
 AJENTI_PLUGIN_ROOT=
 AJENTI_PLUGIN_DIR=
 AJENTI_SERVICE=
+AJENTI_VARIANT=generic
 
 usage() {
 	cat <<'EOF'
@@ -116,28 +117,72 @@ detect_lan_ip() {
 }
 
 detect_ajenti() {
+	# CAREL BOSS Ajenti profile.
+	# BOSS runs Ajenti under Python 2.7 and loads CAREL plugins from
+	# /home/webui/pvshell-web/plugins. The Ajenti plugin namespace is
+	# created by ajenti-panel at runtime, so direct ajenti_plugin_core
+	# imports are not a valid detection method here.
+	if [ -x /usr/bin/ajenti-panel ] \
+		&& [ -x /usr/bin/python2.7 ] \
+		&& [ -d /home/webui/pvshell-web/plugins ] \
+		&& [ -f /home/webui/pvshell-web/plugins/pvshell_settings/plugin.yml ]; then
+
+		AJENTI_VARIANT=carel-boss
+		AJENTI_PYTHON=/usr/bin/python2.7
+		AJENTI_PLUGIN_ROOT=/home/webui/pvshell-web/plugins
+		AJENTI_PLUGIN_DIR=$AJENTI_PLUGIN_ROOT/frigotehnica
+
+		if [ -x /etc/init.d/plugins ]; then
+			AJENTI_SERVICE=plugins
+		elif [ -x /etc/init.d/ajenti ]; then
+			AJENTI_SERVICE=ajenti
+		fi
+
+		return 0
+	fi
+
+	# Generic Ajenti detection.
 	for candidate in /opt/ajenti/bin/python3 /opt/ajenti/bin/python /usr/bin/python3 /usr/bin/python; do
 		[ -x "$candidate" ] || continue
+
 		if "$candidate" -c 'import aj, ajenti_plugin_core' >/dev/null 2>&1; then
-			root=$($candidate -c 'import os, ajenti_plugin_core; print(os.path.dirname(os.path.dirname(os.path.abspath(ajenti_plugin_core.__file__))))' 2>/dev/null || true)
+			root=$("$candidate" -c 'import os, ajenti_plugin_core; print(os.path.dirname(os.path.dirname(os.path.abspath(ajenti_plugin_core.__file__))))' 2>/dev/null || true)
+
 			if [ -n "$root" ] && [ -d "$root" ]; then
 				AJENTI_PYTHON=$candidate
 				AJENTI_PLUGIN_ROOT=$root
+				AJENTI_PLUGIN_DIR=$AJENTI_PLUGIN_ROOT/ajenti_plugin_frigotehnica
+				AJENTI_VARIANT=generic
 				return 0
 			fi
 		fi
 	done
+
 	return 1
 }
 
 if [ "$AJENTI_MODE" != no ] && detect_ajenti; then
 	AJENTI_ENABLED=yes
-	AJENTI_PLUGIN_DIR=$AJENTI_PLUGIN_ROOT/ajenti_plugin_frigotehnica
-	[ -x /etc/init.d/ajenti ] && AJENTI_SERVICE=ajenti
-	[ -z "$AJENTI_SERVICE" ] && [ -x /etc/init.d/plugins ] && AJENTI_SERVICE=plugins
-	info "Ajenti detected; the UI will be added to its authenticated Tools menu"
+
+	[ -n "$AJENTI_PLUGIN_DIR" ] || \
+		AJENTI_PLUGIN_DIR=$AJENTI_PLUGIN_ROOT/ajenti_plugin_frigotehnica
+
+	if [ -z "$AJENTI_SERVICE" ]; then
+		[ -x /etc/init.d/ajenti ] && AJENTI_SERVICE=ajenti
+		[ -z "$AJENTI_SERVICE" ] && [ -x /etc/init.d/plugins ] && AJENTI_SERVICE=plugins
+	fi
+
+	if [ "$AJENTI_VARIANT" = carel-boss ]; then
+		info "CAREL BOSS Ajenti detected"
+		info "Ajenti Python: $AJENTI_PYTHON"
+		info "Ajenti plugin directory: $AJENTI_PLUGIN_DIR"
+	else
+		info "Ajenti detected"
+	fi
+
+	info "The UI will be added to Ajenti's authenticated Tools menu"
 elif [ "$AJENTI_MODE" = yes ]; then
-	die "Ajenti was requested but its Python plugin runtime was not detected"
+	die "Ajenti was requested but its plugin runtime was not detected"
 fi
 
 if [ -z "$LISTEN_ADDRESS" ]; then
@@ -208,10 +253,17 @@ info "Release asset checksums verified"
 stage_ajenti_plugin() {
 	plugin_stage=$STAGE_DIR/ajenti_plugin_frigotehnica
 	install -d -m 0755 "$plugin_stage/resources"
+if [ "$AJENTI_VARIANT" = carel-boss ]; then
+	cat > "$plugin_stage/__init__.py" <<'PY'
+import main
+import views
+PY
+else
 	cat > "$plugin_stage/__init__.py" <<'PY'
 from .main import *
 from .views import *
 PY
+fi
 	cat > "$plugin_stage/main.py" <<'PY'
 from jadi import component
 from aj.plugins.core.api.sidebar import SidebarItemProvider
@@ -299,6 +351,24 @@ class FrigotehnicaProxy(HttpPlugin):
         http_context.add_header('Content-Length', str(len(data)))
         return data
 PY
+if [ "$AJENTI_VARIANT" = carel-boss ]; then
+	cat > "$plugin_stage/plugin.yml" <<'YAML'
+name: frigotehnica
+author: Frigotehnica
+email: office@frigotehnica.com
+url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
+version: '1.2.0-carel-test'
+title: 'Frigotehnica Cloudflare Tunnel'
+icon: cloud
+dependencies:
+    - !!python/object:aj.plugins.PluginDependency { plugin_name: core }
+resources:
+    - 'resources/module.js'
+    - 'resources/view.html'
+    - 'resources/style.css'
+    - 'ng:ajenti.frigotehnica'
+YAML
+else
 	cat > "$plugin_stage/plugin.yml" <<'YAML'
 name: frigotehnica
 author: Frigotehnica
@@ -315,6 +385,7 @@ resources:
     - 'resources/style.css'
     - 'ng:ajenti.frigotehnica'
 YAML
+fi
 	cat > "$plugin_stage/resources/module.js" <<'JS'
 angular.module('ajenti.frigotehnica', [])
   .config(['$routeProvider', function ($routeProvider) {
@@ -511,4 +582,3 @@ if [ "$AJENTI_ENABLED" = yes ]; then
 		info "Restart Ajenti or reboot the device once to load the new plugin"
 	fi
 fi
-
