@@ -39,9 +39,9 @@ const (
 )
 
 type config struct {
-	listen, authFile, bootstrapFile, tokenFile, cloudflared, service, logFile string
-	siteName, hostname                                                        string
-	demo, demoBootstrap                                                       bool
+	listen, authFile, bootstrapFile, proxySecretFile, tokenFile, cloudflared, service, logFile string
+	siteName, hostname                                                                         string
+	demo, demoBootstrap, demoAjenti                                                            bool
 }
 
 type session struct {
@@ -74,6 +74,7 @@ type statusResponse struct {
 	Diagnostics            []string `json:"diagnostics"`
 	ServiceDetail          string   `json:"serviceDetail"`
 	PasswordChangeRequired bool     `json:"passwordChangeRequired"`
+	ExternalAuth           bool     `json:"externalAuth"`
 }
 
 func main() {
@@ -81,6 +82,7 @@ func main() {
 	flag.StringVar(&cfg.listen, "listen", "127.0.0.1:9080", "listen address")
 	flag.StringVar(&cfg.authFile, "auth-file", "/opt/frigotehnica/config/admin.auth", "admin password hash file")
 	flag.StringVar(&cfg.bootstrapFile, "bootstrap-file", "/opt/frigotehnica/config/bootstrap.required", "one-time password marker file")
+	flag.StringVar(&cfg.proxySecretFile, "proxy-secret-file", "", "trusted Ajenti proxy secret file")
 	flag.StringVar(&cfg.tokenFile, "token-file", "/opt/frigotehnica/config/tunnel.token", "Cloudflare token file")
 	flag.StringVar(&cfg.cloudflared, "cloudflared", "/opt/frigotehnica/cloudflared", "cloudflared binary")
 	flag.StringVar(&cfg.service, "service", "cloudflared-frigotehnica", "OpenRC service")
@@ -89,6 +91,7 @@ func main() {
 	flag.StringVar(&cfg.hostname, "hostname", "boss-test.frigotehnica.dpdns.org", "displayed public hostname")
 	flag.BoolVar(&cfg.demo, "demo", false, "local visual QA mode")
 	flag.BoolVar(&cfg.demoBootstrap, "demo-bootstrap", false, "show forced password setup in demo mode")
+	flag.BoolVar(&cfg.demoAjenti, "demo-ajenti", false, "simulate Ajenti authentication in demo mode")
 	flag.Parse()
 
 	if flag.NArg() == 1 && flag.Arg(0) == "generate-password" {
@@ -132,18 +135,23 @@ func main() {
 	mux.HandleFunc("POST /api/token", s.requireAuth(s.requireCSRF(s.updateToken)))
 	mux.HandleFunc("POST /api/password", s.requireAuth(s.requireCSRF(s.updatePassword)))
 
-	h := securityHeaders(http.MaxBytesHandler(mux, maxBody))
+	h := s.securityHeaders(http.MaxBytesHandler(mux, maxBody))
 	httpServer := &http.Server{Addr: cfg.listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	log.Printf("Frigotehnica Tunnel Control listening on %s", cfg.listen)
 	log.Fatal(httpServer.ListenAndServe())
 }
 
-func securityHeaders(next http.Handler) http.Handler {
+func (s *server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		if s.cfg.proxySecretFile != "" || s.cfg.demoAjenti {
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'")
+		} else {
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -246,6 +254,10 @@ func (s *server) currentSession(r *http.Request) (session, bool) {
 
 func (s *server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.trustedProxyRequest(r) {
+			next(w, r)
+			return
+		}
 		if _, ok := s.currentSession(r); !ok {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -260,6 +272,10 @@ func (s *server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func (s *server) requireCSRF(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.trustedProxyRequest(r) {
+			next(w, r)
+			return
+		}
 		sess, ok := s.currentSession(r)
 		if !ok || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(sess.csrf)) != 1 || !sameOrigin(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -267,6 +283,31 @@ func (s *server) requireCSRF(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+func (s *server) trustedProxyRequest(r *http.Request) bool {
+	if s.cfg.demo && s.cfg.demoAjenti {
+		return isLoopbackRemote(r.RemoteAddr)
+	}
+	if s.cfg.proxySecretFile == "" || !isLoopbackRemote(r.RemoteAddr) {
+		return false
+	}
+	want, err := os.ReadFile(s.cfg.proxySecretFile)
+	if err != nil {
+		return false
+	}
+	want = []byte(strings.TrimSpace(string(want)))
+	got := []byte(r.Header.Get("X-Frigotehnica-Ajenti"))
+	return len(want) >= 32 && len(want) == len(got) && subtle.ConstantTimeCompare(want, got) == 1
+}
+
+func isLoopbackRemote(remote string) bool {
+	host, _, err := net.SplitHostPort(remote)
+	if err != nil {
+		host = remote
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 func sameOrigin(r *http.Request) bool {
@@ -280,19 +321,20 @@ func sameOrigin(r *http.Request) bool {
 
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
 	sess, _ := s.currentSession(r)
+	externalAuth := s.trustedProxyRequest(r)
 	w.Header().Set("Cache-Control", "no-store")
-	_ = s.tpl.ExecuteTemplate(w, "index.html", map[string]any{"CSRF": sess.csrf, "SiteName": s.cfg.siteName, "Hostname": s.cfg.hostname})
+	_ = s.tpl.ExecuteTemplate(w, "index.html", map[string]any{"CSRF": sess.csrf, "SiteName": s.cfg.siteName, "Hostname": s.cfg.hostname, "ExternalAuth": externalAuth})
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.collectStatus(r.Context()))
+	writeJSON(w, s.collectStatus(r.Context(), s.trustedProxyRequest(r)))
 }
 
 func (s *server) check(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.collectStatus(r.Context()))
+	writeJSON(w, s.collectStatus(r.Context(), s.trustedProxyRequest(r)))
 }
 
-func (s *server) collectStatus(ctx context.Context) statusResponse {
+func (s *server) collectStatus(ctx context.Context, externalAuth bool) statusResponse {
 	state := "disconnected"
 	label := "Disconnected"
 	detail := "OpenRC service is not running"
@@ -327,7 +369,7 @@ func (s *server) collectStatus(ctx context.Context) statusResponse {
 		diagnostics = []string{"Configure the Cloudflare tunnel token to start the service."}
 	}
 	originOK := probeOrigin()
-	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: humanDuration(time.Since(s.started)), LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: s.passwordChangeRequired()}
+	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: humanDuration(time.Since(s.started)), LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: !externalAuth && s.passwordChangeRequired(), ExternalAuth: externalAuth}
 }
 
 func filePresent(path string) bool {
@@ -360,7 +402,7 @@ func (s *server) serviceAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid action", http.StatusBadRequest)
 		return
 	}
-	if s.passwordChangeRequired() {
+	if !s.trustedProxyRequest(r) && s.passwordChangeRequired() {
 		http.Error(w, "Change the one-time administrator password first", http.StatusPreconditionRequired)
 		return
 	}
@@ -392,7 +434,7 @@ func (s *server) serviceAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
-	if s.passwordChangeRequired() {
+	if !s.trustedProxyRequest(r) && s.passwordChangeRequired() {
 		http.Error(w, "Change the one-time administrator password first", http.StatusPreconditionRequired)
 		return
 	}
@@ -622,3 +664,4 @@ func derive(password, salt []byte) []byte {
 	}
 	return sum
 }
+
