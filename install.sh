@@ -256,7 +256,6 @@ stage_ajenti_plugin() {
 if [ "$AJENTI_VARIANT" = carel-boss ]; then
 	cat > "$plugin_stage/__init__.py" <<'PY'
 import main
-import views
 PY
 else
 	cat > "$plugin_stage/__init__.py" <<'PY'
