@@ -41,6 +41,9 @@ jobs:
             https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-amd64
           echo "8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5  cloudflared-linux-armhf-2026.8.2" | sha256sum -c -
           echo "fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2  cloudflared-linux-amd64-2026.8.2" | sha256sum -c -
+      - name: Normalize script line endings
+        run: |
+          sed -i 's/\r$//' install.sh uninstall.sh
       - name: Pin installer checksum to this build
         run: |
           arm_sha=$(sha256sum frigotehnica-tunnel-ui-linux-armv7 | awk '{print $1}')
