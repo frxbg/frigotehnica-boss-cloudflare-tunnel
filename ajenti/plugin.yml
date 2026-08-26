@@ -4,7 +4,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.1'
+version: '1.2.2-rc2'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -21,7 +21,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.1'
+version: '1.2.2-rc2'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
