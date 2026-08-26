@@ -6,6 +6,7 @@ Secure Cloudflare Tunnel installer and local management UI for ARMv7 and x86_64 
 
 - One-line installation
 - Non-interactive bootstrap for restricted browser terminals
+- Authenticated Ajenti integration on port `8443`
 - Official Cloudflare `cloudflared` binary
 - SHA-256 verification
 - Remotely managed Cloudflare Tunnel
@@ -24,12 +25,21 @@ Run as a user with `sudo` access:
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
 ```
 
-The installer securely prompts for:
+When Ajenti is installed, the installer automatically:
+
+- binds Tunnel Control to `127.0.0.1:9080` so the port is not exposed
+- adds **Tools → Cloudflare Tunnel** to Ajenti
+- uses the existing Ajenti session instead of a second login
+- restarts Ajenti after the installation command has completed
+
+Open Ajenti on port `8443` and select **Tools → Cloudflare Tunnel**.
+
+On devices without Ajenti, the installer securely prompts for:
 
 - Cloudflare tunnel token
 - UI administrator password
 
-It automatically detects the device LAN address and installs the panel on port `9080`.
+It detects the device LAN address and installs the standalone panel on port `9080`.
 
 After installation, open:
 
@@ -45,10 +55,10 @@ For browser terminals that cannot provide interactive input, run:
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive
 ```
 
-The installer prints a random one-time UI password. Open the local panel on
-port `9080`, sign in with that password, and replace it when prompted. After
-the password change, paste the Cloudflare tunnel token in **Token management**.
-The tunnel service starts automatically after the token is saved.
+With Ajenti, no second login or externally reachable port `9080` is needed.
+Open **Tools → Cloudflare Tunnel** and paste the Cloudflare token in **Token
+management**. Without Ajenti, the installer prints a random one-time UI
+password for the standalone panel on port `9080`.
 
 The non-interactive mode never creates an unauthenticated panel and never uses
 a shared default password.
@@ -61,10 +71,6 @@ directly into a root shell. Each release provides a pinned one-line command for
 these devices: it downloads the installer in legacy TLS mode, verifies its
 exact SHA-256 digest, and only then runs it. Downloaded program binaries are
 also checked against the SHA-256 values embedded in the verified installer.
-
-```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.1.0/install.sh -o /tmp/frigotehnica-install-v1.1.0.sh && echo 'e337c4301abcc405a0e253382269f090e6b449a5db69be9151e483e286a2b9d7  /tmp/frigotehnica-install-v1.1.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.1.0.sh --non-interactive
-```
 
 For `v1.0.2`, use this exact command:
 
@@ -85,6 +91,9 @@ curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases
     --hostname boss-test.example.com
 ```
 
+Use `--ajenti` to require Ajenti integration or `--no-ajenti` to force the
+standalone LAN interface. Ajenti mode only permits a loopback listen address.
+
 ## Requirements
 
 - Carel BOSS or compatible embedded Linux device
@@ -101,9 +110,11 @@ curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases
 /opt/frigotehnica/frigotehnica-tunnel-ui
 /opt/frigotehnica/config/tunnel.token
 /opt/frigotehnica/config/admin.auth
+/opt/frigotehnica/config/ajenti-proxy.secret
 /opt/frigotehnica/logs/
 /etc/init.d/cloudflared-frigotehnica
 /etc/init.d/frigotehnica-tunnel-ui
+AJENTI_SITE_PACKAGES/ajenti_plugin_frigotehnica/
 ```
 
 ## Service management
@@ -122,9 +133,11 @@ sudo rc-service frigotehnica-tunnel-ui restart
 - Non-interactive installs generate a unique one-time password and require its replacement.
 - Secrets are read interactively from `/dev/tty`.
 - The tunnel token and password hash are stored with mode `0600`.
+- Ajenti proxy requests require a unique root-only secret and a loopback source.
+- Ajenti validates the user session before the plugin proxies any UI request.
 - The UI does not accept arbitrary shell commands.
-- SSH, Ajenti, and the Tunnel Control UI are not exposed through Cloudflare.
-- LAN access currently uses HTTP and should only be enabled on a trusted network.
+- Port `9080` is loopback-only when Ajenti integration is active.
+- Standalone LAN access uses HTTP and should only be enabled on a trusted network.
 
 Never commit tunnel tokens, passwords, customer configurations, Carel firmware, or proprietary vendor files.
 
@@ -156,3 +169,4 @@ Use only on devices you own or are explicitly authorized to administer.
 ## License
 
 MIT
+
