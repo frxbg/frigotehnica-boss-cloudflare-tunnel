@@ -1,5 +1,6 @@
 const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
 const $ = selector => document.querySelector(selector);
+const appURL = path => new URL(path.replace(/^\//, ''), document.baseURI).toString();
 let toastTimer;
 let passwordChangeRequired = false;
 
@@ -14,7 +15,7 @@ function toast(message) {
 async function api(path, options = {}) {
   const headers = {'X-CSRF-Token': csrf, ...(options.headers || {})};
   if (options.body) headers['Content-Type'] = 'application/json';
-  const response = await fetch(path, {...options, headers, credentials: 'same-origin'});
+  const response = await fetch(appURL(path), {...options, headers, credentials: 'same-origin'});
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 }
@@ -52,6 +53,8 @@ function render(s) {
   $('#originState').textContent = s.originOK ? 'Available' : 'Unavailable';
   $('#tokenSummary').textContent = s.tokenPresent ? 'Configured ✓' : 'Setup required';
   $('#serviceDetail').textContent = s.serviceDetail;
+  $('#securityPanel').hidden = s.externalAuth;
+  $('#accessMode').textContent = s.externalAuth ? 'Secured by Ajenti' : 'Local access only';
   $('#setupBanner').hidden = !s.passwordChangeRequired && s.tokenPresent;
 	$('#setupTitle').textContent = s.passwordChangeRequired ? 'Initial setup required' : 'Cloudflare token required';
 	$('#setupMessage').textContent = s.passwordChangeRequired
@@ -154,7 +157,7 @@ $('#savePasswordBtn').addEventListener('click', async () => {
   button.disabled = true;
   try {
     await api('/api/password', {method: 'POST', body: JSON.stringify({current, password, confirm})});
-    window.location.assign('/login');
+    window.location.assign(appURL('login'));
   } catch (error) {
     toast(error.message.trim() || 'The password could not be saved.');
   } finally {
@@ -165,3 +168,4 @@ $('#savePasswordBtn').addEventListener('click', async () => {
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-GB'); }, 1000);
 refresh();
 setInterval(refresh, 15000);
+
