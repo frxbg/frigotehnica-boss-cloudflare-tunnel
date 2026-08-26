@@ -356,16 +356,12 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.0-carel-test'
+version: '1.2.2-rc1'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
     - !!python/object:aj.plugins.PluginDependency { plugin_name: core }
-resources:
-    - 'resources/module.js'
-    - 'resources/view.html'
-    - 'resources/style.css'
-    - 'ng:ajenti.frigotehnica'
+resources: []
 YAML
 else
 	cat > "$plugin_stage/plugin.yml" <<'YAML'
