@@ -115,3 +115,46 @@ func TestUpdateTokenCreatesProtectedFileInDemo(t *testing.T) {
 		t.Fatalf("token permissions are not 0600: %v %v", info.Mode().Perm(), err)
 	}
 }
+
+func TestTrustedAjentiProxyRequiresLoopbackAndMatchingSecret(t *testing.T) {
+	secretFile := filepath.Join(t.TempDir(), "ajenti-proxy.secret")
+	secret := strings.Repeat("a", 64)
+	if err := os.WriteFile(secretFile, []byte(secret+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{cfg: config{proxySecretFile: secretFile}}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "127.0.0.1:43120"
+	req.Header.Set("X-Frigotehnica-Ajenti", secret)
+	if !s.trustedProxyRequest(req) {
+		t.Fatal("valid loopback Ajenti proxy request was rejected")
+	}
+	req.RemoteAddr = "192.168.1.20:43120"
+	if s.trustedProxyRequest(req) {
+		t.Fatal("non-loopback proxy request was accepted")
+	}
+	req.RemoteAddr = "127.0.0.1:43120"
+	req.Header.Set("X-Frigotehnica-Ajenti", strings.Repeat("b", 64))
+	if s.trustedProxyRequest(req) {
+		t.Fatal("proxy request with wrong secret was accepted")
+	}
+}
+
+func TestAjentiAuthenticationBypassesStandaloneSession(t *testing.T) {
+	secretFile := filepath.Join(t.TempDir(), "ajenti-proxy.secret")
+	secret := strings.Repeat("c", 64)
+	if err := os.WriteFile(secretFile, []byte(secret), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s := &server{cfg: config{proxySecretFile: secretFile}, sessions: map[string]session{}}
+	called := false
+	h := s.requireAuth(func(w http.ResponseWriter, r *http.Request) { called = true })
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "[::1]:41234"
+	req.Header.Set("X-Frigotehnica-Ajenti", secret)
+	h(httptest.NewRecorder(), req)
+	if !called {
+		t.Fatal("Ajenti-authenticated request did not reach the handler")
+	}
+}
+
