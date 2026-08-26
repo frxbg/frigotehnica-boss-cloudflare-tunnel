@@ -12,6 +12,11 @@ rm -f /etc/init.d/frigotehnica-tunnel-ui
 rm -f /etc/init.d/cloudflared-frigotehnica
 rm -f /opt/frigotehnica/frigotehnica-tunnel-ui
 
+# CAREL BOSS Ajenti plugin location
+if [ -d /home/webui/pvshell-web/plugins/frigotehnica ]; then
+	rm -rf /home/webui/pvshell-web/plugins/frigotehnica
+fi
+
 AJENTI_SERVICE=
 for candidate in /opt/ajenti/bin/python3 /opt/ajenti/bin/python /usr/bin/python3 /usr/bin/python; do
 	[ -x "$candidate" ] || continue
