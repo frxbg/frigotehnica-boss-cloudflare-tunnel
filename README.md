@@ -7,6 +7,7 @@ Secure Cloudflare Tunnel installer and local management UI for ARMv7 and x86_64 
 - One-line installation
 - Non-interactive bootstrap for restricted browser terminals
 - Authenticated Ajenti integration on port `8443`
+- Native CAREL BOSS Ajenti view with an authenticated API-only proxy
 - Official Cloudflare `cloudflared` binary
 - SHA-256 verification
 - Remotely managed Cloudflare Tunnel
@@ -33,6 +34,11 @@ When Ajenti is installed, the installer automatically:
 - restarts Ajenti after the installation command has completed
 
 Open Ajenti on port `8443` and select **Tools → Cloudflare Tunnel**.
+
+The installer selects the correct release binaries automatically:
+
+- `x86_64`/`amd64` for the larger BOSS systems
+- ARMv7 hard-float for the smaller BOSS systems
 
 On devices without Ajenti, the installer securely prompts for:
 
@@ -72,14 +78,27 @@ these devices: it downloads the installer in legacy TLS mode, verifies its
 exact SHA-256 digest, and only then runs it. Downloaded program binaries are
 also checked against the SHA-256 values embedded in the verified installer.
 
-For `v1.2.0`, use this exact non-interactive command:
+For `v1.3.0`, use this exact non-interactive command:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.2.0/install.sh -o /tmp/frigotehnica-install-v1.2.0.sh && echo '7cb973114c98dfc66b91d15ee7142e5b22dc6b520acd5e3083bda545962aa890  /tmp/frigotehnica-install-v1.2.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.2.0.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.0/install.sh -o /tmp/frigotehnica-install-v1.3.0.sh && echo 'ba30aa90c720115e1975f5cf9cfc09463d3d81e71b87aa29d600d62a94b2757a  /tmp/frigotehnica-install-v1.3.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.0.sh --non-interactive --ajenti
 ```
 
 The installer digest is pinned to this release and must not be reused for a
 newer version.
+
+## Upgrade
+
+Run the installation command again. The installer detects the platform,
+downloads the matching `x86_64` or ARMv7 assets, backs up the existing
+installation, replaces stale Ajenti plugin files, and restarts the affected
+services:
+
+```sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for release details.
 
 ## Custom installation
 
@@ -169,4 +188,3 @@ Use only on devices you own or are explicitly authorized to administer.
 ## License
 
 MIT
-
