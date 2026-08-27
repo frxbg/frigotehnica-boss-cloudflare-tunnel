@@ -417,7 +417,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.4-carel'
+version: '1.3.5-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -654,7 +654,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.4'
+version: '1.3.5'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -792,7 +792,7 @@ pidfile="/var/run/cloudflared-frigotehnica.pid"
 output_log="/opt/frigotehnica/logs/cloudflared.log"
 error_log="/opt/frigotehnica/logs/cloudflared.log"
 retry="TERM/15/KILL/5"
-depend() { need net; use dns logger; after localmount; }
+depend() { use dns logger; after localmount net; }
 start_pre() {
 	[ -x "${command}" ] || { eerror "Missing cloudflared binary"; return 1; }
 	[ -s /opt/frigotehnica/config/tunnel.token ] || { eerror "Missing tunnel token"; return 1; }
@@ -810,7 +810,7 @@ pidfile="/var/run/frigotehnica-tunnel-ui.pid"
 output_log="/opt/frigotehnica/logs/tunnel-ui.log"
 error_log="/opt/frigotehnica/logs/tunnel-ui.log"
 retry="TERM/10/KILL/5"
-depend() { use net logger; after localmount cloudflared-frigotehnica; }
+depend() { use logger; after localmount net cloudflared-frigotehnica; }
 start_pre() {
 	[ -x "\${command}" ] || { eerror "Missing Tunnel Control binary"; return 1; }
 	[ -s /opt/frigotehnica/config/admin.auth ] || { eerror "Missing admin authentication file"; return 1; }

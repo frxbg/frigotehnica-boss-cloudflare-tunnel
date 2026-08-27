@@ -2,6 +2,23 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [1.3.5] - 2026-08-27
+
+### Fixed
+
+- Removed the remaining hard OpenRC `net` dependency from the cloudflared
+  service. On some running CAREL BOSS systems, starting `net` recursively
+  attempted `localmount` and `fsck` against an already mounted filesystem.
+- Changed both services to ordering-only relationships with `localmount` and
+  `net`, preventing service starts and token updates from invoking filesystem
+  checks or restarting the device network stack.
+
+### Compatibility
+
+- Normal boot ordering remains intact when the services share an OpenRC
+  runlevel with `localmount` and `net`.
+- ARMv7 and x86_64/amd64 support remains unchanged.
+
 ## [1.3.4] - 2026-08-27
 
 ### Fixed
@@ -127,3 +144,4 @@ Changes since `v1.2.2-rc2`:
 [1.3.2]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.1...v1.3.2
 [1.3.3]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.2...v1.3.3
 [1.3.4]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.3...v1.3.4
+[1.3.5]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.4...v1.3.5
