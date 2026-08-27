@@ -1,122 +1,235 @@
-# Frigotehnica BOSS Cloudflare Tunnel
+<a id="readme-top"></a>
 
-Secure Cloudflare Tunnel installer and local management UI for ARMv7 and x86_64 Carel BOSS devices running Gentoo/OpenRC.
+[![Release][release-shield]][release-url]
+[![Release workflow][actions-shield]][actions-url]
+[![License][license-shield]][license-url]
+[![Issues][issues-shield]][issues-url]
 
-## Features
+<div align="center">
+  <h1>Frigotehnica BOSS Cloudflare Tunnel</h1>
 
-- One-line installation
-- Non-interactive bootstrap for restricted browser terminals
-- Authenticated Ajenti integration on port `8443`
-- Native CAREL BOSS Ajenti view with an authenticated API-only proxy
-- Official Cloudflare `cloudflared` binary
-- SHA-256 verification
-- Remotely managed Cloudflare Tunnel
-- Local English management interface
-- Secure tunnel token replacement
-- Tunnel status and connection monitoring
-- OpenRC startup services
-- ARMv7 hard-float support
-- Upgrade backups and safe uninstall
+  <p>
+    Secure Cloudflare Tunnel installation and management for CAREL BOSS systems.
+    <br />
+    <a href="https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest"><strong>Download the latest release</strong></a>
+    <br />
+    <br />
+    <a href="https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/issues/new">Report a bug</a>
+    &middot;
+    <a href="https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/issues/new">Request a feature</a>
+  </p>
+</div>
 
-## Installation
+Current release: `v1.3.1`
 
-Run as a user with `sudo` access:
+<details>
+  <summary>Table of contents</summary>
+  <ol>
+    <li>
+      <a href="#about-the-project">About the project</a>
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#architecture-support">Architecture support</a></li>
+        <li><a href="#built-with">Built with</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+        <li><a href="#non-interactive-installation">Non-interactive installation</a></li>
+        <li><a href="#legacy-ca-certificates">Legacy CA certificates</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#upgrade">Upgrade</a></li>
+        <li><a href="#ajenti-plugin-only-update">Ajenti plugin-only update</a></li>
+        <li><a href="#custom-installation">Custom installation</a></li>
+        <li><a href="#service-management">Service management</a></li>
+        <li><a href="#uninstall">Uninstall</a></li>
+      </ul>
+    </li>
+    <li><a href="#installed-files">Installed files</a></li>
+    <li><a href="#security">Security</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#changelog">Changelog</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
+
+## About the project
+
+Frigotehnica BOSS Cloudflare Tunnel installs the official Cloudflare
+`cloudflared` client and a small local management UI on CAREL BOSS devices
+running Gentoo Linux with OpenRC.
+
+When Ajenti is available, the installer adds **Tools → Cloudflare Tunnel** to
+the existing authenticated interface on port `8443`. The management backend
+remains bound to `127.0.0.1:9080`, so no additional administration port is
+exposed. Systems without Ajenti can use a password-protected standalone panel
+on their trusted LAN.
+
+This is an independent community project. It is not affiliated with or
+endorsed by CAREL or Cloudflare.
+
+### Features
+
+- One-line installation and upgrade.
+- Automatic CAREL BOSS and generic Ajenti detection.
+- Native CAREL BOSS Ajenti view with an authenticated API-only proxy.
+- Existing Ajenti session authentication; no second login is required.
+- Secure tunnel token replacement and connection monitoring.
+- Tunnel start, stop, restart, status, uptime, and connection information.
+- Official `cloudflared` binaries with pinned SHA-256 verification.
+- Non-interactive bootstrap for restricted browser terminals.
+- OpenRC boot services, upgrade backups, and safe uninstall.
+- Separate Ajenti plugin-only update mode.
+
+### Architecture support
+
+The installer reads `uname -m` and downloads the matching release assets:
+
+| CAREL BOSS type | Detected architecture | Release binary |
+| --- | --- | --- |
+| Larger BOSS systems | `x86_64` or `amd64` | `frigotehnica-tunnel-ui-linux-amd64` |
+| Smaller BOSS systems | `armv7l` or `armv7*` | `frigotehnica-tunnel-ui-linux-armv7` |
+
+ARM devices use the official `cloudflared-linux-armhf` build. Both architecture
+variants are built and published by the release workflow.
+
+### Built with
+
+- [Go](https://go.dev/) for the management backend and embedded web UI.
+- POSIX shell for installation, upgrades, and removal.
+- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+  for outbound-only remote connectivity.
+- Ajenti and AngularJS integration for the authenticated CAREL BOSS view.
+- GitHub Actions for tests, cross-compilation, checksums, and release assets.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Getting started
+
+### Prerequisites
+
+- CAREL BOSS or compatible embedded Linux device.
+- Gentoo Linux with OpenRC.
+- ARMv7 hard-float or x86_64/amd64 architecture.
+- Root access or a user with `sudo` access.
+- Outbound HTTPS and Cloudflare Tunnel connectivity.
+- `curl`, `sha256sum`, `install`, and standard POSIX utilities.
+- A remotely managed Cloudflare Tunnel token.
+
+### Installation
+
+Run the installer as a user with `sudo` access:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
 ```
 
-When Ajenti is installed, the installer automatically:
+With Ajenti, the installer automatically:
 
-- binds Tunnel Control to `127.0.0.1:9080` so the port is not exposed
-- adds **Tools → Cloudflare Tunnel** to Ajenti
-- uses the existing Ajenti session instead of a second login
-- restarts Ajenti after the installation command has completed
+1. Binds Tunnel Control to `127.0.0.1:9080`.
+2. Installs the matching CAREL BOSS or generic Ajenti plugin.
+3. Uses the existing authenticated Ajenti session.
+4. Restarts the detected Ajenti service after installation.
 
-Open Ajenti on port `8443` and select **Tools → Cloudflare Tunnel**.
+Open Ajenti on port `8443`, select **Tools → Cloudflare Tunnel**, and configure
+the Cloudflare tunnel token.
 
-The installer selects the correct release binaries automatically:
-
-- `x86_64`/`amd64` for the larger BOSS systems
-- ARMv7 hard-float for the smaller BOSS systems
-
-On devices without Ajenti, the installer securely prompts for:
-
-- Cloudflare tunnel token
-- UI administrator password
-
-It detects the device LAN address and installs the standalone panel on port `9080`.
-
-After installation, open:
+Without Ajenti, the installer asks for the tunnel token and an administrator
+password. It detects the LAN address and exposes the standalone panel at:
 
 ```text
 http://DEVICE_IP:9080
 ```
 
-## Non-interactive installation
+### Non-interactive installation
 
-For browser terminals that cannot provide interactive input, run:
-
-```sh
-curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive
-```
-
-With Ajenti, no second login or externally reachable port `9080` is needed.
-Open **Tools → Cloudflare Tunnel** and paste the Cloudflare token in **Token
-management**. Without Ajenti, the installer prints a random one-time UI
-password for the standalone panel on port `9080`.
-
-The non-interactive mode never creates an unauthenticated panel and never uses
-a shared default password.
-
-## Legacy CA certificates
-
-Some older Carel BOSS systems have an outdated CA certificate bundle and
-cannot validate GitHub's HTTPS certificate. Do not pipe an unverified download
-directly into a root shell. Each release provides a pinned one-line command for
-these devices: it downloads the installer in legacy TLS mode, verifies its
-exact SHA-256 digest, and only then runs it. Downloaded program binaries are
-also checked against the SHA-256 values embedded in the verified installer.
-
-For `v1.3.0`, use this exact non-interactive command:
+For a restricted CAREL BOSS browser terminal with Ajenti:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.0/install.sh -o /tmp/frigotehnica-install-v1.3.0.sh && echo 'ba30aa90c720115e1975f5cf9cfc09463d3d81e71b87aa29d600d62a94b2757a  /tmp/frigotehnica-install-v1.3.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.0.sh --non-interactive --ajenti
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive --ajenti
 ```
 
-The installer digest is pinned to this release and must not be reused for a
-newer version.
+No second login or externally reachable port `9080` is required. After the
+installation, open **Tools → Cloudflare Tunnel** and enter the tunnel token.
 
-## Upgrade
+For a non-interactive standalone installation without Ajenti:
 
-Run the installation command again. The installer detects the platform,
-downloads the matching `x86_64` or ARMv7 assets, backs up the existing
-installation, replaces stale Ajenti plugin files, and restarts the affected
-services:
+```sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive --no-ajenti
+```
+
+Standalone mode prints a randomly generated one-time UI password. Replace it
+on first login. Non-interactive installation never creates an unauthenticated
+panel and never uses a shared default password.
+
+### Legacy CA certificates
+
+Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
+because their CA bundle is outdated. Never pipe an unverified download directly
+into a root shell.
+
+The following `v1.3.1` command downloads the installer with legacy TLS mode,
+verifies its exact pinned SHA-256 digest, and only then executes it. The verified
+installer also checks the downloaded program binaries:
+
+```sh
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.1/install.sh -o /tmp/frigotehnica-install-v1.3.1.sh && echo '5dfa7efd4373227609d866ec31c0abf99a4825d06c5128ac2d007148ae4d6c2d  /tmp/frigotehnica-install-v1.3.1.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.1.sh --non-interactive --ajenti
+```
+
+The digest is pinned to `v1.3.1` and must not be reused with another release.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Usage
+
+Use the Ajenti panel or standalone UI to view tunnel health, replace the token,
+and control the `cloudflared` service. Tokens and passwords are never accepted
+as command-line arguments.
+
+### Upgrade
+
+Run the normal installation command again:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) for release details.
+The installer retains the existing configuration, selects the correct ARMv7 or
+x86_64 assets, backs up installed program and plugin files, removes stale
+Ajenti resources, and restarts the affected services.
 
-## Ajenti plugin-only update
+### Ajenti plugin-only update
 
-Use this mode only when Tunnel Control is already installed and working, and
-you want to replace just its Ajenti integration:
+Available in `v1.3.1` and newer. Use this only when Tunnel Control is already
+installed and working and only the Ajenti integration needs to be replaced:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --plugin-only
 ```
 
-The command auto-detects CAREL BOSS or generic Ajenti, backs up the existing
-plugin, installs the matching plugin resources, and restarts Ajenti. It does
-not download or replace the Tunnel Control binary, `cloudflared`, tunnel token,
-administrator authentication, or OpenRC service files. If the backend or its
-Ajenti proxy secret is missing or too old, the command stops and instructs you
-to run the full installer first.
+Plugin-only mode:
 
-## Custom installation
+- Detects CAREL BOSS or generic Ajenti.
+- Backs up and replaces only the Ajenti plugin files.
+- Restarts the detected Ajenti service.
+- Does not download or replace the Tunnel Control binary or `cloudflared`.
+- Does not change the tunnel token, administrator authentication, or OpenRC
+  service files.
+
+If the management backend, Ajenti proxy secret, or compatible service
+configuration is missing, the command stops and instructs you to run the full
+installer.
+
+### Custom installation
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh \
@@ -127,16 +240,29 @@ curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases
 ```
 
 Use `--ajenti` to require Ajenti integration or `--no-ajenti` to force the
-standalone LAN interface. Ajenti mode only permits a loopback listen address.
+standalone LAN interface. Ajenti mode permits only a loopback listen address.
+Run `install.sh --help` for the complete option list.
 
-## Requirements
+### Service management
 
-- Carel BOSS or compatible embedded Linux device
-- ARMv7 hard-float or x86_64 architecture
-- Gentoo Linux with OpenRC
-- Root or sudo access
-- Outbound HTTPS and Cloudflare Tunnel connectivity
-- `curl`, `sha256sum`, and standard POSIX utilities
+```sh
+sudo rc-service cloudflared-frigotehnica status
+sudo rc-service cloudflared-frigotehnica restart
+
+sudo rc-service frigotehnica-tunnel-ui status
+sudo rc-service frigotehnica-tunnel-ui restart
+```
+
+### Uninstall
+
+```sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/uninstall.sh | sudo sh
+```
+
+The uninstaller retains configuration secrets and logs to avoid accidental
+data loss. Review `/opt/frigotehnica` before removing retained data manually.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Installed files
 
@@ -149,58 +275,95 @@ standalone LAN interface. Ajenti mode only permits a loopback listen address.
 /opt/frigotehnica/logs/
 /etc/init.d/cloudflared-frigotehnica
 /etc/init.d/frigotehnica-tunnel-ui
-AJENTI_SITE_PACKAGES/ajenti_plugin_frigotehnica/
 ```
 
-## Service management
+Depending on the detected Ajenti variant, one of these plugin directories is
+installed:
 
-```sh
-sudo rc-service cloudflared-frigotehnica status
-sudo rc-service cloudflared-frigotehnica restart
-
-sudo rc-service frigotehnica-tunnel-ui status
-sudo rc-service frigotehnica-tunnel-ui restart
+```text
+<AJENTI_SITE_PACKAGES>/ajenti_plugin_frigotehnica/  # generic Ajenti
+/home/webui/pvshell-web/plugins/frigotehnica/        # CAREL BOSS
 ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Security
 
 - Tokens and passwords are never accepted as command-line arguments.
-- Non-interactive installs generate a unique one-time password and require its replacement.
-- Secrets are read interactively from `/dev/tty`.
-- The tunnel token and password hash are stored with mode `0600`.
-- Ajenti proxy requests require a unique root-only secret and a loopback source.
-- Ajenti validates the user session before the plugin proxies any UI request.
+- Interactive secrets are read from `/dev/tty`.
+- Standalone non-interactive installs create a unique one-time password.
+- Tunnel tokens and password hashes are stored with mode `0600`.
+- Ajenti proxy requests require a unique root-owned, restricted secret and a
+  loopback source.
+- Ajenti validates the active user session before proxying UI requests.
+- Ajenti mode binds port `9080` to loopback only.
 - The UI does not accept arbitrary shell commands.
-- Port `9080` is loopback-only when Ajenti integration is active.
-- Standalone LAN access uses HTTP and should only be enabled on a trusted network.
+- Standalone LAN access uses HTTP and should only be enabled on a trusted
+  network.
 
-Never commit tunnel tokens, passwords, customer configurations, Carel firmware, or proprietary vendor files.
+Never commit tunnel tokens, passwords, customer configuration, CAREL firmware,
+or proprietary vendor files.
 
-## Uninstall
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/frxbg/frigotehnica-boss-cloudflare-tunnel/main/uninstall.sh | sudo sh
-```
+## Roadmap
 
-The uninstaller retains secrets and logs so they are not destroyed accidentally. Review `/opt/frigotehnica` before manually removing retained data.
+- [x] ARMv7 hard-float support.
+- [x] x86_64/amd64 support.
+- [x] Authenticated generic Ajenti integration.
+- [x] Native CAREL BOSS Ajenti integration.
+- [x] Non-interactive and legacy-CA installation modes.
+- [x] Ajenti plugin-only updates.
+- [ ] Add automated integration tests against representative BOSS firmware
+  environments.
 
-## Supported platform
+See the [open issues](https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/issues)
+for proposed features and known issues.
 
-The current release targets:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-```text
-Architecture: ARMv7 hard-float or x86_64
-Operating system: Gentoo Linux
-Init system: OpenRC
-Tested device: Carel BOSS
-```
+## Contributing
 
-## Disclaimer
+Contributions are welcome. Please avoid committing customer secrets, tunnel
+tokens, passwords, proprietary CAREL firmware, or vendor files.
 
-This is an independent community project and is not affiliated with or endorsed by CAREL or Cloudflare.
+1. Fork the repository.
+2. Create a feature branch: `git switch -c feature/your-change`.
+3. Test the Go code with `go test ./...`.
+4. Check the shell scripts with `sh -n install.sh uninstall.sh`.
+5. Commit and push the branch.
+6. Open a pull request describing the affected BOSS/Ajenti variant.
 
-Use only on devices you own or are explicitly authorized to administer.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and compatibility changes.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## License
 
-MIT
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Acknowledgments
+
+- [Cloudflare](https://www.cloudflare.com/) for `cloudflared` and Cloudflare
+  Tunnel.
+- [Ajenti](https://ajenti.org/) for the web administration platform.
+- [Best README Template](https://github.com/othneildrew/Best-README-Template)
+  for the README structure.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<!-- Reference-style links -->
+[release-shield]: https://img.shields.io/github/v/release/frxbg/frigotehnica-boss-cloudflare-tunnel?style=for-the-badge
+[release-url]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest
+[actions-shield]: https://img.shields.io/github/actions/workflow/status/frxbg/frigotehnica-boss-cloudflare-tunnel/release.yml?style=for-the-badge&label=release
+[actions-url]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/actions/workflows/release.yml
+[license-shield]: https://img.shields.io/github/license/frxbg/frigotehnica-boss-cloudflare-tunnel?style=for-the-badge
+[license-url]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/blob/main/LICENSE
+[issues-shield]: https://img.shields.io/github/issues/frxbg/frigotehnica-boss-cloudflare-tunnel?style=for-the-badge
+[issues-url]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/issues
