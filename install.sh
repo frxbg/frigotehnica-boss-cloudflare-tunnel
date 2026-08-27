@@ -401,7 +401,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.1-carel'
+version: '1.3.2-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -450,7 +450,7 @@ angular.module('ajenti.frigotehnica').controller('FrigotehnicaTunnelController',
     $scope.error = null;
     $scope.message = null;
     $http.post(BASE + '/api/token', {token: $scope.token}).then(function () {
-      $scope.message = 'Token saved.';
+      $scope.message = 'Token saved and tunnel restarted.';
       $scope.token = '';
       $scope.refresh();
     }, fail)['finally'](function () {
@@ -463,8 +463,8 @@ angular.module('ajenti.frigotehnica').controller('FrigotehnicaTunnelController',
     $scope.error = null;
     $scope.message = null;
     $http.post(BASE + '/api/service/' + action, confirm ? {confirm: true} : {}).then(function () {
-      $scope.message = 'Done.';
-      $timeout($scope.refresh, 4000);
+      $scope.message = action == 'restart' ? 'Tunnel restarted and verified.' : 'Tunnel stopped and verified.';
+      $timeout($scope.refresh, 1000);
     }, fail)['finally'](function () {
       $scope.busy = false;
     });
@@ -499,8 +499,12 @@ JS
         <div class="list-group-item">{{status.serviceDetail}}</div>
         <div class="list-group-item">
             Tunnel token:
-            <span class="text-success" ng:if="status.tokenPresent">configured</span>
+            <span class="text-success" ng:if="status.tokenValid">valid</span>
+            <span class="text-danger" ng:if="status.tokenPresent && !status.tokenValid">invalid</span>
             <span class="text-danger" ng:if="!status.tokenPresent">missing</span>
+        </div>
+        <div class="list-group-item" ng:if="status.tunnelId">
+            Tunnel ID: <code>{{status.tunnelId}}</code>
         </div>
     </div>
 
@@ -634,7 +638,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.1'
+version: '1.3.2'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:

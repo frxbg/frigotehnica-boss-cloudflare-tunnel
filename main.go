@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -70,6 +71,8 @@ type statusResponse struct {
 	LastCheck              string   `json:"lastCheck"`
 	Connections            int      `json:"connections"`
 	TokenPresent           bool     `json:"tokenPresent"`
+	TokenValid             bool     `json:"tokenValid"`
+	TunnelID               string   `json:"tunnelId"`
 	OriginOK               bool     `json:"originOK"`
 	Diagnostics            []string `json:"diagnostics"`
 	ServiceDetail          string   `json:"serviceDetail"`
@@ -338,15 +341,22 @@ func (s *server) collectStatus(ctx context.Context, externalAuth bool) statusRes
 	state := "disconnected"
 	label := "Disconnected"
 	detail := "OpenRC service is not running"
+	uptime := humanDuration(time.Since(s.started))
+	serviceRunning := false
 	if s.cfg.demo {
 		if s.demoUp {
+			serviceRunning = true
 			state, label, detail = "connected", "Connected", "OpenRC service is running"
 		}
 	} else {
 		c, cancel := context.WithTimeout(ctx, 4*time.Second)
 		defer cancel()
 		if err := exec.CommandContext(c, "rc-service", s.cfg.service, "status").Run(); err == nil {
+			serviceRunning = true
 			state, label, detail = "connected", "Connected", "OpenRC service is running"
+			if serviceAge, ok := openRCServiceUptime(s.cfg.service); ok {
+				uptime = humanDuration(serviceAge)
+			}
 		}
 	}
 	version := "unknown"
@@ -362,14 +372,78 @@ func (s *server) collectStatus(ctx context.Context, externalAuth bool) statusRes
 		}
 	}
 	connections, diagnostics := safeDiagnostics(s.cfg.logFile, s.cfg.demo)
+	if serviceRunning && connections == 0 && !s.cfg.demo {
+		state, label, detail = "connecting", "Not connected", "OpenRC service is running, but no Cloudflare connection is registered"
+	}
 	tokenPresent := filePresent(s.cfg.tokenFile)
+	tokenValid := false
+	tunnelID := ""
+	if tokenPresent {
+		if tokenBytes, err := os.ReadFile(s.cfg.tokenFile); err == nil {
+			if parsedID, err := parseTunnelToken(strings.TrimSpace(string(tokenBytes))); err == nil {
+				tokenValid = true
+				tunnelID = parsedID
+			}
+		}
+	}
 	if !tokenPresent {
 		state, label, detail = "disconnected", "Not configured", "Waiting for Cloudflare tunnel token"
 		connections = 0
 		diagnostics = []string{"Configure the Cloudflare tunnel token to start the service."}
+	} else if !tokenValid {
+		state, label, detail = "disconnected", "Invalid token", "The saved file is not a valid Cloudflare Tunnel token"
+		connections = 0
+		diagnostics = []string{"Copy the token from the target tunnel's Add a replica command."}
 	}
 	originOK := probeOrigin()
-	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: humanDuration(time.Since(s.started)), LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: !externalAuth && s.passwordChangeRequired(), ExternalAuth: externalAuth}
+	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: uptime, LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, TokenValid: tokenValid, TunnelID: tunnelID, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: !externalAuth && s.passwordChangeRequired(), ExternalAuth: externalAuth}
+}
+
+func openRCServiceUptime(service string) (time.Duration, bool) {
+	pidBytes, err := os.ReadFile(filepath.Join("/var/run", service+".pid"))
+	if err != nil {
+		return 0, false
+	}
+	pid := strings.TrimSpace(string(pidBytes))
+	if _, err := strconv.Atoi(pid); err != nil {
+		return 0, false
+	}
+	statBytes, err := os.ReadFile(filepath.Join("/proc", pid, "stat"))
+	if err != nil {
+		return 0, false
+	}
+	stat := string(statBytes)
+	closingParen := strings.LastIndex(stat, ")")
+	if closingParen < 0 {
+		return 0, false
+	}
+	fields := strings.Fields(stat[closingParen+1:])
+	// Field 22 is the process start time. After removing PID and comm,
+	// it is index 19 in the remaining fields. Linux USER_HZ is 100.
+	if len(fields) <= 19 {
+		return 0, false
+	}
+	startTicks, err := strconv.ParseFloat(fields[19], 64)
+	if err != nil {
+		return 0, false
+	}
+	uptimeBytes, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0, false
+	}
+	uptimeFields := strings.Fields(string(uptimeBytes))
+	if len(uptimeFields) == 0 {
+		return 0, false
+	}
+	systemSeconds, err := strconv.ParseFloat(uptimeFields[0], 64)
+	if err != nil {
+		return 0, false
+	}
+	processSeconds := systemSeconds - startTicks/100
+	if processSeconds < 0 {
+		return 0, false
+	}
+	return time.Duration(processSeconds * float64(time.Second)), true
 }
 
 func filePresent(path string) bool {
@@ -426,7 +500,8 @@ func (s *server) serviceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, action).Run(); err != nil {
+	if err := runOpenRCAction(ctx, s.cfg.service, action); err != nil {
+		log.Printf("OpenRC %s failed for %s: %v", action, s.cfg.service, err)
 		http.Error(w, "The operation was not successful", http.StatusInternalServerError)
 		return
 	}
@@ -450,6 +525,10 @@ func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid token", http.StatusBadRequest)
 		return
 	}
+	if _, err := parseTunnelToken(token); err != nil {
+		http.Error(w, "Invalid Cloudflare Tunnel token. Copy the eyJ... token from the target tunnel's Add a replica command.", http.StatusBadRequest)
+		return
+	}
 	dir := filepath.Dir(s.cfg.tokenFile)
 	tmp, err := os.CreateTemp(dir, ".tunnel-token-*")
 	if err != nil {
@@ -471,7 +550,15 @@ func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = os.Rename(tmpName, s.cfg.tokenFile)
 	}
+	if err == nil {
+		var saved []byte
+		saved, err = os.ReadFile(s.cfg.tokenFile)
+		if err == nil && strings.TrimSpace(string(saved)) != token {
+			err = errors.New("saved token verification failed")
+		}
+	}
 	if err != nil {
+		log.Printf("token save failed for %s: %v", s.cfg.tokenFile, err)
 		http.Error(w, "The token could not be saved", http.StatusInternalServerError)
 		return
 	}
@@ -481,15 +568,100 @@ func (s *server) updateToken(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	action := "restart"
-	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, "status").Run(); err != nil {
-		action = "start"
-	}
-	if err := exec.CommandContext(ctx, "rc-service", s.cfg.service, action).Run(); err != nil {
+	if err := runOpenRCAction(ctx, s.cfg.service, "restart"); err != nil {
+		log.Printf("OpenRC restart after token update failed for %s: %v", s.cfg.service, err)
 		http.Error(w, "The token was saved, but the restart failed", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func parseTunnelToken(token string) (string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return "", errors.New("token is not standard base64")
+	}
+	var payload struct {
+		AccountTag   string `json:"a"`
+		TunnelSecret []byte `json:"s"`
+		TunnelID     string `json:"t"`
+	}
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return "", errors.New("token payload is not valid JSON")
+	}
+	if payload.AccountTag == "" || len(payload.TunnelSecret) < 16 || !uuidLike.MatchString(payload.TunnelID) {
+		return "", errors.New("token payload is missing Cloudflare Tunnel credentials")
+	}
+	return strings.ToLower(payload.TunnelID), nil
+}
+
+func runOpenRCAction(ctx context.Context, service, action string) error {
+	run := func(command string) error {
+		output, err := exec.CommandContext(ctx, "rc-service", service, command).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("rc-service %s: %w: %s", command, err, strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
+	isRunning := func() bool {
+		return exec.CommandContext(ctx, "rc-service", service, "status").Run() == nil
+	}
+	waitFor := func(running bool) error {
+		deadline := time.NewTimer(8 * time.Second)
+		defer deadline.Stop()
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		var stableSince time.Time
+		for {
+			if isRunning() == running {
+				if !running {
+					return nil
+				}
+				if stableSince.IsZero() {
+					stableSince = time.Now()
+				} else if time.Since(stableSince) >= 2*time.Second {
+					return nil
+				}
+			} else {
+				stableSince = time.Time{}
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline.C:
+				return fmt.Errorf("service did not become %s", map[bool]string{true: "running", false: "stopped"}[running])
+			case <-ticker.C:
+			}
+		}
+	}
+
+	switch action {
+	case "restart":
+		if isRunning() {
+			if err := run("stop"); err != nil {
+				return err
+			}
+			if err := waitFor(false); err != nil {
+				return err
+			}
+		}
+		if err := run("start"); err != nil {
+			return err
+		}
+		return waitFor(true)
+	case "start":
+		if err := run("start"); err != nil {
+			return err
+		}
+		return waitFor(true)
+	case "stop":
+		if err := run("stop"); err != nil && isRunning() {
+			return err
+		}
+		return waitFor(false)
+	default:
+		return fmt.Errorf("unsupported OpenRC action %q", action)
+	}
 }
 
 func (s *server) updatePassword(w http.ResponseWriter, r *http.Request) {
@@ -558,6 +730,7 @@ func writeSecretFile(path, value string) error {
 
 var tokenLike = regexp.MustCompile(`(?i)(token[=: ]+)[^ ]+|eyJ[A-Za-z0-9_.-]{40,}`)
 var connectionIndex = regexp.MustCompile(`connIndex[^0-9]{1,6}([0-9]+)`)
+var uuidLike = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 func safeDiagnostics(path string, demo bool) (int, []string) {
 	if demo {
@@ -574,7 +747,10 @@ func safeDiagnostics(path string, demo bool) (int, []string) {
 	lines := make([]string, 0, 12)
 	for s.Scan() {
 		line := tokenLike.ReplaceAllString(s.Text(), "$1[REDACTED]")
-		if strings.Contains(line, "Registered tunnel connection") {
+		if strings.Contains(line, "Starting tunnel") {
+			connections = map[string]bool{}
+			lines = []string{"Cloudflared started a new tunnel session."}
+		} else if strings.Contains(line, "Registered tunnel connection") {
 			if m := connectionIndex.FindStringSubmatch(line); len(m) == 2 {
 				connections[m[1]] = true
 			}
@@ -664,4 +840,3 @@ func derive(password, salt []byte) []byte {
 	}
 	return sum
 }
-

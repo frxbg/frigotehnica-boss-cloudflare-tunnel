@@ -20,7 +20,7 @@
   </p>
 </div>
 
-Current release: `v1.3.1`
+Current release: `v1.3.2`
 
 <details>
   <summary>Table of contents</summary>

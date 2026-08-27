@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,7 +11,65 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
+
+const testTunnelID = "123e4567-e89b-42d3-a456-426614174000"
+
+func testTunnelToken() string {
+	payload := `{"a":"account-tag","s":"MDEyMzQ1Njc4OWFiY2RlZg==","t":"` + testTunnelID + `"}`
+	return base64.StdEncoding.EncodeToString([]byte(payload))
+}
+
+func installFakeRCService(t *testing.T, initiallyRunning bool) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake rc-service test requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	state := filepath.Join(dir, "running")
+	logFile := filepath.Join(dir, "commands.log")
+	if initiallyRunning {
+		if err := os.WriteFile(state, []byte("running\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := `#!/bin/sh
+echo "$2" >> "$RC_LOG"
+case "$2" in
+  status) test -f "$RC_STATE" ;;
+  start) printf running > "$RC_STATE" ;;
+  stop) rm -f "$RC_STATE" ;;
+  *) exit 1 ;;
+esac
+`
+	path := filepath.Join(dir, "rc-service")
+	if err := os.WriteFile(path, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RC_STATE", state)
+	t.Setenv("RC_LOG", logFile)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return logFile
+}
+
+func TestRunOpenRCRestartStopsStartsAndVerifies(t *testing.T) {
+	logFile := installFakeRCService(t, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := runOpenRCAction(ctx, "cloudflared-frigotehnica", "restart"); err != nil {
+		t.Fatal(err)
+	}
+	commands, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Fields(string(commands))
+	joined := strings.Join(got, ",")
+	if !strings.HasPrefix(joined, "status,stop,status,start,status") || strings.Count(joined, "status") < 3 {
+		t.Fatalf("unexpected OpenRC sequence: %v", got)
+	}
+}
 
 func TestPasswordHash(t *testing.T) {
 	h, err := makePasswordHash([]byte("correct horse battery staple"))
@@ -44,6 +104,30 @@ func TestConnectionIndexFormats(t *testing.T) {
 		if len(m) != 2 {
 			t.Fatalf("connection index not parsed from %q", line)
 		}
+	}
+}
+
+func TestDiagnosticsDiscardConnectionsFromPreviousTunnelSession(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "cloudflared.log")
+	content := strings.Join([]string{
+		`INF Registered tunnel connection connIndex=0`,
+		`INF Registered tunnel connection connIndex=1`,
+		`INF Starting tunnel tunnelID=old-session-is-over`,
+		`ERR Failed to connect to edge`,
+	}, "\n")
+	if err := os.WriteFile(logFile, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	connections, _ := safeDiagnostics(logFile, false)
+	if connections != 0 {
+		t.Fatalf("stale connections were reported after a new session started: %d", connections)
+	}
+	if err := os.WriteFile(logFile, []byte(content+"\nINF Registered tunnel connection connIndex=0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	connections, _ = safeDiagnostics(logFile, false)
+	if connections != 1 {
+		t.Fatalf("current session connection was not reported: %d", connections)
 	}
 }
 
@@ -99,7 +183,7 @@ func TestUpdatePasswordRemovesBootstrapMarker(t *testing.T) {
 func TestUpdateTokenCreatesProtectedFileInDemo(t *testing.T) {
 	tokenFile := filepath.Join(t.TempDir(), "tunnel.token")
 	s := &server{cfg: config{demo: true, tokenFile: tokenFile}}
-	token := strings.Repeat("a", 100)
+	token := testTunnelToken()
 	req := httptest.NewRequest(http.MethodPost, "/api/token", bytes.NewBufferString(`{"token":"`+token+`"}`))
 	w := httptest.NewRecorder()
 	s.updateToken(w, req)
@@ -113,6 +197,45 @@ func TestUpdateTokenCreatesProtectedFileInDemo(t *testing.T) {
 	info, err := os.Stat(tokenFile)
 	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) {
 		t.Fatalf("token permissions are not 0600: %v %v", info.Mode().Perm(), err)
+	}
+}
+
+func TestUpdateTokenPersistsThenRestartsOpenRC(t *testing.T) {
+	logFile := installFakeRCService(t, true)
+	tokenFile := filepath.Join(t.TempDir(), "tunnel.token")
+	s := &server{cfg: config{tokenFile: tokenFile, service: "cloudflared-frigotehnica"}}
+	token := testTunnelToken()
+	req := httptest.NewRequest(http.MethodPost, "/api/token", bytes.NewBufferString(`{"token":"`+token+`"}`))
+	w := httptest.NewRecorder()
+	s.updateToken(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("token update failed: %d %s", w.Code, w.Body.String())
+	}
+	saved, err := os.ReadFile(tokenFile)
+	if err != nil || strings.TrimSpace(string(saved)) != token {
+		t.Fatalf("new token was not persisted: %v", err)
+	}
+	commands, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Fields(string(commands))
+	joined := strings.Join(got, ",")
+	if !strings.HasPrefix(joined, "status,stop,status,start,status") || strings.Count(joined, "status") < 3 {
+		t.Fatalf("token update did not perform a verified restart: %v", got)
+	}
+}
+
+func TestParseTunnelTokenReturnsEmbeddedTunnelID(t *testing.T) {
+	id, err := parseTunnelToken(testTunnelToken())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != testTunnelID {
+		t.Fatalf("unexpected tunnel ID: got %q want %q", id, testTunnelID)
+	}
+	if _, err := parseTunnelToken(strings.Repeat("a", 100)); err == nil {
+		t.Fatal("malformed token was accepted")
 	}
 }
 
@@ -157,4 +280,3 @@ func TestAjentiAuthenticationBypassesStandaloneSession(t *testing.T) {
 		t.Fatal("Ajenti-authenticated request did not reach the handler")
 	}
 }
-

@@ -49,9 +49,10 @@ function render(s) {
   $('#lastCheck').textContent = s.lastCheck;
   $('#cloudState').textContent = s.state === 'connected' ? 'Connected' : 'Disconnected';
   $('#connections').textContent = `${s.connections} active`;
-  $('#tokenState').textContent = s.tokenPresent ? 'Configured' : 'Missing';
+  $('#tokenState').textContent = s.tokenValid ? 'Valid' : (s.tokenPresent ? 'Invalid' : 'Missing');
+  $('#tunnelId').textContent = s.tunnelId || 'Not available';
   $('#originState').textContent = s.originOK ? 'Available' : 'Unavailable';
-  $('#tokenSummary').textContent = s.tokenPresent ? 'Configured ✓' : 'Setup required';
+  $('#tokenSummary').textContent = s.tokenValid ? 'Valid ✓' : (s.tokenPresent ? 'Invalid token' : 'Setup required');
   $('#serviceDetail').textContent = s.serviceDetail;
   $('#securityPanel').hidden = s.externalAuth;
   $('#accessMode').textContent = s.externalAuth ? 'Secured by Ajenti' : 'Local access only';
@@ -91,7 +92,7 @@ async function runAction(action, body = {}) {
   button.disabled = true;
   try {
     await api(`/api/service/${action}`, {method: 'POST', body: JSON.stringify(body)});
-    toast(action === 'stop' ? 'The tunnel has been stopped.' : 'The tunnel has been restarted.');
+    toast(action === 'stop' ? 'The tunnel has been stopped and verified.' : 'The tunnel has been restarted and verified.');
     $('#confirmDialog').close();
     setTimeout(refresh, 1000);
   } catch {
@@ -168,4 +169,3 @@ $('#savePasswordBtn').addEventListener('click', async () => {
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-GB'); }, 1000);
 refresh();
 setInterval(refresh, 15000);
-
