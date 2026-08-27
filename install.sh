@@ -29,6 +29,7 @@ AJENTI_PLUGIN_ROOT=
 AJENTI_PLUGIN_DIR=
 AJENTI_SERVICE=
 AJENTI_VARIANT=generic
+PLUGIN_ONLY=no
 
 usage() {
 	cat <<'EOF'
@@ -44,6 +45,7 @@ Options:
   --token-file PATH        Read tunnel token from a protected local file
   --non-interactive        Install UI without prompting; print a one-time password
   --ajenti                 Require authenticated Ajenti integration on port 8443
+  --plugin-only            Update only the Ajenti plugin; keep binaries, secrets, and services
   --no-ajenti              Disable automatic Ajenti integration
   --release-base-url URL   Download missing release assets from URL
   --no-enable              Do not add services to the OpenRC default runlevel
@@ -66,6 +68,7 @@ while [ "$#" -gt 0 ]; do
 		--token-file) [ "$#" -ge 2 ] || die "--token-file requires a value"; TOKEN_FILE_SOURCE=$2; shift 2 ;;
 		--non-interactive) NON_INTERACTIVE=yes; shift ;;
 		--ajenti) AJENTI_MODE=yes; shift ;;
+		--plugin-only) PLUGIN_ONLY=yes; AJENTI_MODE=yes; shift ;;
 		--no-ajenti) AJENTI_MODE=no; shift ;;
 		--release-base-url) [ "$#" -ge 2 ] || die "--release-base-url requires a value"; RELEASE_BASE_URL=${2%/}; shift 2 ;;
 		--no-enable) ENABLE_BOOT=no; shift ;;
@@ -245,12 +248,14 @@ verify_asset() {
 	[ "$actual" = "$expected" ] || die "SHA-256 mismatch for $(basename "$file")"
 }
 
-fetch_asset "$UI_ASSET" "$STAGE_DIR/$UI_ASSET"
-fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
-verify_asset "$STAGE_DIR/$UI_ASSET" "$UI_SHA256"
-verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
-chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
-info "Release asset checksums verified"
+if [ "$PLUGIN_ONLY" != yes ]; then
+	fetch_asset "$UI_ASSET" "$STAGE_DIR/$UI_ASSET"
+	fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
+	verify_asset "$STAGE_DIR/$UI_ASSET" "$UI_SHA256"
+	verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
+	chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
+	info "Release asset checksums verified"
+fi
 
 stage_ajenti_plugin() {
 	plugin_stage=$STAGE_DIR/ajenti_plugin_frigotehnica
@@ -396,7 +401,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.0-carel'
+version: '1.3.1-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -629,7 +634,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.0'
+version: '1.3.1'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -656,6 +661,36 @@ CSS
 fi
 	find "$plugin_stage" -type f -exec chmod 0644 {} \;
 }
+
+if [ "$PLUGIN_ONLY" = yes ]; then
+	[ "$AJENTI_ENABLED" = yes ] || die "--plugin-only requires a detected Ajenti installation"
+	[ -x "$UI_BINARY" ] || die "Tunnel Control is not installed; run the full installer first"
+	[ -s "$CONFIG_DIR/ajenti-proxy.secret" ] || die "Ajenti proxy secret is missing; run the full installer first"
+	[ -f /etc/init.d/$UI_SERVICE ] || die "Tunnel Control service is missing; run the full installer first"
+	grep -q -- '-proxy-secret-file' /etc/init.d/$UI_SERVICE || die "installed backend does not support the Ajenti proxy; run the full installer first"
+
+	stage_ajenti_plugin
+	if [ -d "$AJENTI_PLUGIN_DIR" ]; then
+		install -d -m 0700 "$BACKUP_DIR"
+		cp -Rp "$AJENTI_PLUGIN_DIR" "$BACKUP_DIR/"
+		info "Existing Ajenti plugin backed up to $BACKUP_DIR"
+	fi
+	rm -rf "$AJENTI_PLUGIN_DIR"
+	install -d -m 0755 "$AJENTI_PLUGIN_DIR"
+	cp -a "$STAGE_DIR/ajenti_plugin_frigotehnica/." "$AJENTI_PLUGIN_DIR/"
+	if [ "$AJENTI_VARIANT" = carel-boss ]; then
+		chgrp webui "$CONFIG_DIR/ajenti-proxy.secret" 2>/dev/null || true
+		chmod 0640 "$CONFIG_DIR/ajenti-proxy.secret"
+	fi
+	info "Ajenti plugin updated without changing Tunnel Control binaries, configuration, or OpenRC services"
+	if [ -n "$AJENTI_SERVICE" ]; then
+		info "Ajenti will restart in 3 seconds to load the plugin"
+		nohup sh -c "sleep 3; rc-service '$AJENTI_SERVICE' restart" >/dev/null 2>&1 &
+	else
+		info "Restart Ajenti or reboot the device once to load the updated plugin"
+	fi
+	exit 0
+fi
 
 if [ "$AJENTI_ENABLED" = yes ]; then
 	if [ -s "$CONFIG_DIR/ajenti-proxy.secret" ]; then

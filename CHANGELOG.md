@@ -2,6 +2,21 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [1.3.1] - 2026-08-27
+
+### Added
+
+- Added a real `--plugin-only` installer mode for updating only the detected
+  CAREL BOSS or generic Ajenti plugin.
+- Added plugin-only backup, compatibility checks, and Ajenti restart handling.
+- Documented the plugin-only command and exactly which installed files it does
+  and does not change.
+
+### Changed
+
+- Updated the generic Ajenti plugin version to `1.3.1` and the CAREL variant
+  to `1.3.1-carel`.
+
 ## [1.3.0] - 2026-08-27
 
 Changes since `v1.2.2-rc2`:
@@ -43,3 +58,4 @@ Changes since `v1.2.2-rc2`:
 - Both architectures remain built and published by the release workflow.
 
 [1.3.0]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.2.2-rc2...v1.3.0
+[1.3.1]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.0...v1.3.1

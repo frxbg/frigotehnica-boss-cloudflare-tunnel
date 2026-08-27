@@ -100,6 +100,22 @@ curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases
 
 See [CHANGELOG.md](CHANGELOG.md) for release details.
 
+## Ajenti plugin-only update
+
+Use this mode only when Tunnel Control is already installed and working, and
+you want to replace just its Ajenti integration:
+
+```sh
+curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --plugin-only
+```
+
+The command auto-detects CAREL BOSS or generic Ajenti, backs up the existing
+plugin, installs the matching plugin resources, and restarts Ajenti. It does
+not download or replace the Tunnel Control binary, `cloudflared`, tunnel token,
+administrator authentication, or OpenRC service files. If the backend or its
+Ajenti proxy secret is missing or too old, the command stops and instructs you
+to run the full installer first.
+
 ## Custom installation
 
 ```sh
