@@ -417,7 +417,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.3-carel'
+version: '1.3.4-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -654,7 +654,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.3'
+version: '1.3.4'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -810,7 +810,7 @@ pidfile="/var/run/frigotehnica-tunnel-ui.pid"
 output_log="/opt/frigotehnica/logs/tunnel-ui.log"
 error_log="/opt/frigotehnica/logs/tunnel-ui.log"
 retry="TERM/10/KILL/5"
-depend() { need localmount; use net logger; after cloudflared-frigotehnica; }
+depend() { use net logger; after localmount cloudflared-frigotehnica; }
 start_pre() {
 	[ -x "\${command}" ] || { eerror "Missing Tunnel Control binary"; return 1; }
 	[ -s /opt/frigotehnica/config/admin.auth ] || { eerror "Missing admin authentication file"; return 1; }

@@ -20,7 +20,7 @@
   </p>
 </div>
 
-Current release: `v1.3.3`
+Current release: `v1.3.4`
 
 <details>
   <summary>Table of contents</summary>
@@ -201,21 +201,21 @@ Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
 because their CA bundle is outdated. Never pipe an unverified download directly
 into a root shell.
 
-The following `v1.3.3` command downloads the installer with legacy TLS mode,
+The following `v1.3.4` command downloads the installer with legacy TLS mode,
 verifies its exact pinned SHA-256 digest, and only then executes it. The verified
 installer also checks the downloaded program binaries:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.3/install.sh -o /tmp/frigotehnica-install-v1.3.3.sh && echo '5acf9fa04c98c7dcf0e8c33f9d9cf3263e605f9544ad11ef9dcbf7befdf582b7  /tmp/frigotehnica-install-v1.3.3.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.3.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.4/install.sh -o /tmp/frigotehnica-install-v1.3.4.sh && echo 'V1.3.4_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.4.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.4.sh --non-interactive --ajenti
 ```
 
 For a legacy-CA system with `wget` but no `curl`, use:
 
 ```sh
-wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.3.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.3/install.sh && echo '5acf9fa04c98c7dcf0e8c33f9d9cf3263e605f9544ad11ef9dcbf7befdf582b7  /tmp/frigotehnica-install-v1.3.3.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.3.sh --non-interactive --ajenti
+wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.4.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.4/install.sh && echo 'V1.3.4_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.4.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.4.sh --non-interactive --ajenti
 ```
 
-The digest is pinned to `v1.3.3` and must not be reused with another release.
+The digest is pinned to `v1.3.4` and must not be reused with another release.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

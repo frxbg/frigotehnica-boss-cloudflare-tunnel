@@ -2,6 +2,22 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [1.3.4] - 2026-08-27
+
+### Fixed
+
+- Changed the Tunnel Control OpenRC service from a hard `localmount`
+  dependency to ordering-only semantics.
+- Prevented installation on an already running CAREL BOSS from trying to
+  start `localmount`, rerun `fsck` against a mounted filesystem, and block the
+  UI service with `cannot start localmount as fsck would not start`.
+
+### Compatibility
+
+- Boot ordering is retained: Tunnel Control starts after `localmount` when it
+  is part of the normal boot sequence.
+- ARMv7 and x86_64/amd64 support remains unchanged.
+
 ## [1.3.3] - 2026-08-27
 
 ### Added
@@ -110,3 +126,4 @@ Changes since `v1.2.2-rc2`:
 [1.3.1]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.0...v1.3.1
 [1.3.2]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.1...v1.3.2
 [1.3.3]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.2...v1.3.3
+[1.3.4]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.3...v1.3.4
