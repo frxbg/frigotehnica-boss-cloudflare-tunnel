@@ -20,7 +20,7 @@
   </p>
 </div>
 
-Current release: `v1.3.2`
+Current release: `v1.3.3`
 
 <details>
   <summary>Table of contents</summary>
@@ -122,7 +122,7 @@ variants are built and published by the release workflow.
 - ARMv7 hard-float or x86_64/amd64 architecture.
 - Root access or a user with `sudo` access.
 - Outbound HTTPS and Cloudflare Tunnel connectivity.
-- `curl`, `sha256sum`, `install`, and standard POSIX utilities.
+- `curl` or `wget`, plus `sha256sum`, `install`, and standard POSIX utilities.
 - A remotely managed Cloudflare Tunnel token.
 
 ### Installation
@@ -131,6 +131,18 @@ Run the installer as a user with `sudo` access:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
+```
+
+On CAREL BOSS Micro and other systems with `wget` but no `curl`:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sudo sh /tmp/frigotehnica-install.sh
+```
+
+When already logged in as `root`, omit `sudo`:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sh /tmp/frigotehnica-install.sh
 ```
 
 With Ajenti, the installer automatically:
@@ -158,6 +170,12 @@ For a restricted CAREL BOSS browser terminal with Ajenti:
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive --ajenti
 ```
 
+Equivalent command for a `wget`-only CAREL BOSS Micro root shell:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sh /tmp/frigotehnica-install.sh --non-interactive --ajenti
+```
+
 No second login or externally reachable port `9080` is required. After the
 installation, open **Tools → Cloudflare Tunnel** and enter the tunnel token.
 
@@ -165,6 +183,12 @@ For a non-interactive standalone installation without Ajenti:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --non-interactive --no-ajenti
+```
+
+With `wget` and `sudo`:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sudo sh /tmp/frigotehnica-install.sh --non-interactive --no-ajenti
 ```
 
 Standalone mode prints a randomly generated one-time UI password. Replace it
@@ -177,15 +201,21 @@ Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
 because their CA bundle is outdated. Never pipe an unverified download directly
 into a root shell.
 
-The following `v1.3.2` command downloads the installer with legacy TLS mode,
+The following `v1.3.3` command downloads the installer with legacy TLS mode,
 verifies its exact pinned SHA-256 digest, and only then executes it. The verified
 installer also checks the downloaded program binaries:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.2/install.sh -o /tmp/frigotehnica-install-v1.3.2.sh && echo 'ecf0bef1da93c612c68eda4212ff2b5b5a05fbf884e76309f5544d4908b66a47  /tmp/frigotehnica-install-v1.3.2.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.2.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.3/install.sh -o /tmp/frigotehnica-install-v1.3.3.sh && echo 'V1.3.3_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.3.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.3.sh --non-interactive --ajenti
 ```
 
-The digest is pinned to `v1.3.2` and must not be reused with another release.
+For a legacy-CA system with `wget` but no `curl`, use:
+
+```sh
+wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.3.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.3/install.sh && echo 'V1.3.3_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.3.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.3.sh --non-interactive --ajenti
+```
+
+The digest is pinned to `v1.3.3` and must not be reused with another release.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -203,6 +233,12 @@ Run the normal installation command again:
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh
 ```
 
+Upgrade from a `wget`-only root shell:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sh /tmp/frigotehnica-install.sh --non-interactive --ajenti
+```
+
 The installer retains the existing configuration, selects the correct ARMv7 or
 x86_64 assets, backs up installed program and plugin files, removes stale
 Ajenti resources, and restarts the affected services.
@@ -214,6 +250,12 @@ installed and working and only the Ajenti integration needs to be replaced:
 
 ```sh
 curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh | sudo sh -s -- --plugin-only
+```
+
+Plugin-only update from a `wget`-only root shell:
+
+```sh
+wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sh /tmp/frigotehnica-install.sh --plugin-only
 ```
 
 Plugin-only mode:

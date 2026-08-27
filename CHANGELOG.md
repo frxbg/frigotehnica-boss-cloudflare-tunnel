@@ -2,6 +2,29 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [1.3.3] - 2026-08-27
+
+### Added
+
+- Added `wget` as a secure fallback for downloading release assets when `curl`
+  is not installed, including CAREL BOSS Micro systems based on Buildroot.
+- Added README installation, upgrade, and plugin-only commands for systems that
+  provide `wget` but not `curl`.
+
+### Changed
+
+- Release downloads now require an HTTPS base URL with either downloader.
+- Both `curl` and `wget` retain TLS 1.2 requirements, bounded timeouts, and
+  mandatory pinned SHA-256 verification of program binaries; `wget` retries
+  transient download failures up to three times.
+- Updated generic and CAREL Ajenti plugin metadata to `1.3.3`.
+
+### Compatibility
+
+- Verified on CAREL BOSS Micro with Buildroot 2019.02, OpenRC, Python 2.7, and
+  ARMv7 hard-float.
+- Retained support for larger x86_64/amd64 CAREL BOSS systems.
+
 ## [1.3.2] - 2026-08-27
 
 ### Fixed
@@ -86,3 +109,4 @@ Changes since `v1.2.2-rc2`:
 [1.3.0]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.2.2-rc2...v1.3.0
 [1.3.1]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.0...v1.3.1
 [1.3.2]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.1...v1.3.2
+[1.3.3]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.2...v1.3.3

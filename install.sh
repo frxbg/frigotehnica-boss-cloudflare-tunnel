@@ -226,15 +226,31 @@ fetch_asset() {
 	if [ -f "$SCRIPT_DIR/$asset" ]; then
 		cp "$SCRIPT_DIR/$asset" "$destination"
 	elif [ -n "$RELEASE_BASE_URL" ]; then
-		command -v curl >/dev/null 2>&1 || die "curl is required to download release assets"
 		info "Downloading $asset"
-		if [ "$INSECURE_DOWNLOADS" = yes ]; then
-			info "Legacy CA mode: TLS certificate verification is disabled; SHA-256 verification remains mandatory"
-			curl -kfL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
-				-o "$destination" "$RELEASE_BASE_URL/$asset"
+		case "$RELEASE_BASE_URL" in
+			https://*) : ;;
+			*) die "release base URL must use HTTPS" ;;
+		esac
+		if command -v curl >/dev/null 2>&1; then
+			if [ "$INSECURE_DOWNLOADS" = yes ]; then
+				info "Legacy CA mode: TLS certificate verification is disabled; SHA-256 verification remains mandatory"
+				curl -kfL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+					-o "$destination" "$RELEASE_BASE_URL/$asset"
+			else
+				curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+					-o "$destination" "$RELEASE_BASE_URL/$asset"
+			fi
+		elif command -v wget >/dev/null 2>&1; then
+			if [ "$INSECURE_DOWNLOADS" = yes ]; then
+				info "Legacy CA mode: TLS certificate verification is disabled; SHA-256 verification remains mandatory"
+				wget --no-check-certificate --secure-protocol=TLSv1_2 --timeout=20 --tries=3 \
+					-O "$destination" "$RELEASE_BASE_URL/$asset"
+			else
+				wget --secure-protocol=TLSv1_2 --timeout=20 --tries=3 \
+					-O "$destination" "$RELEASE_BASE_URL/$asset"
+			fi
 		else
-			curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
-				-o "$destination" "$RELEASE_BASE_URL/$asset"
+			die "curl or wget is required to download release assets"
 		fi
 	else
 		die "$asset is missing; place it next to install.sh or pass --release-base-url"
@@ -401,7 +417,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.2-carel'
+version: '1.3.3-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -638,7 +654,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.3.2'
+version: '1.3.3'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
