@@ -206,13 +206,13 @@ verifies its exact pinned SHA-256 digest, and only then executes it. The verifie
 installer also checks the downloaded program binaries:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh -o /tmp/frigotehnica-install-v1.3.5.sh && echo 'V1.3.5_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh -o /tmp/frigotehnica-install-v1.3.5.sh && echo '5fe4579a97143974763e3c2beeaf1c267c7d39f80c5682e44a5225b313974870  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
 ```
 
 For a legacy-CA system with `wget` but no `curl`, use:
 
 ```sh
-wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.5.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh && echo 'V1.3.5_INSTALLER_SHA256  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
+wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.5.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh && echo '5fe4579a97143974763e3c2beeaf1c267c7d39f80c5682e44a5225b313974870  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
 ```
 
 The digest is pinned to `v1.3.5` and must not be reused with another release.
