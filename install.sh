@@ -8,7 +8,7 @@ UI_BINARY=$APP_DIR/frigotehnica-tunnel-ui
 CLOUDFLARED_BINARY=$APP_DIR/cloudflared
 TUNNEL_SERVICE=cloudflared-frigotehnica
 UI_SERVICE=frigotehnica-tunnel-ui
-UI_ARMV7_SHA256=695557831093239b92744afa1295d481c043d64b44c1e86cf0c6169caf78b9be
+UI_ARMV7_SHA256=a492ed5a5c136addce780806ae1fa8cd95b734f0c527029f604e51fa02839628
 UI_AMD64_SHA256=PINNED_BY_RELEASE_WORKFLOW
 CLOUDFLARED_ARMV7_SHA256=8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5
 CLOUDFLARED_AMD64_SHA256=fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2
@@ -132,7 +132,9 @@ detect_ajenti() {
 		AJENTI_PLUGIN_ROOT=/home/webui/pvshell-web/plugins
 		AJENTI_PLUGIN_DIR=$AJENTI_PLUGIN_ROOT/frigotehnica
 
-		if [ -x /etc/init.d/plugins ]; then
+		if [ -x /etc/init.d/web-interface ]; then
+			AJENTI_SERVICE=web-interface
+		elif [ -x /etc/init.d/plugins ]; then
 			AJENTI_SERVICE=plugins
 		elif [ -x /etc/init.d/ajenti ]; then
 			AJENTI_SERVICE=ajenti
@@ -252,34 +254,289 @@ info "Release asset checksums verified"
 
 stage_ajenti_plugin() {
 	plugin_stage=$STAGE_DIR/ajenti_plugin_frigotehnica
-	install -d -m 0755 "$plugin_stage/resources"
+	install -d -m 0755 "$plugin_stage"
 if [ "$AJENTI_VARIANT" = carel-boss ]; then
-	cat > "$plugin_stage/views.py" <<'PY'
+	# CAREL BOSS runs Ajenti 2.1.21 on Python 2.7 with implicit sibling
+	# imports. Findings from testing on a real BOSS unit:
+	# - The gate XSRF middleware rejects authenticated requests outside a
+	#   small prefix allowlist; '/view' is exempt.
+	# - The core plugin registers a catch-all '/view/.*' SPA handler before
+	#   this plugin, so an HttpPlugin route would never match. A
+	#   HttpMiddleware runs before the central dispatcher, so the API proxy
+	#   is mounted there under '/view/frigotehnica-tunnel/api/'.
+	# - '/resources/<plugin>/<file>' file serving is restricted to core and
+	#   pvshell_customizations. Templates must ship as prebuilt bundles:
+	#   'resources/build/all.js' is aggregated into '/resources/all.js' and
+	#   every '.html' resource from plugin.yml is inlined into
+	#   '/resources/all.partials.js' via $templateCache.
+	# The UI is a native Angular view (token field + connection status);
+	# only the JSON API is proxied to the loopback backend.
+	cat > "$plugin_stage/__init__.py" <<'PY'
+import main
+PY
+	cat > "$plugin_stage/main.py" <<'PY'
 from jadi import component
-from aj.api.http import url, HttpPlugin
-from aj.api.endpoint import endpoint
+from aj.plugins.core.api.sidebar import SidebarItemProvider
+from aj.api.http import HttpMiddleware
+
+try:
+    from urllib2 import Request, urlopen, HTTPError, URLError
+except ImportError:
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError, URLError
+
+UPSTREAM = 'http://127.0.0.1:9080'
+PROXY_PREFIX = '/view/frigotehnica-tunnel'
+SECRET_FILE = '/opt/frigotehnica/config/ajenti-proxy.secret'
+
+RESPONSE_HEADERS = ('Content-Type', 'Cache-Control', 'Content-Disposition')
 
 
-@component(HttpPlugin)
-class FrigotehnicaTestHandler(HttpPlugin):
+@component(SidebarItemProvider)
+class FrigotehnicaSidebarItem(SidebarItemProvider):
     def __init__(self, context):
         self.context = context
 
-    @url(r'/api/frigotehnica/ping')
-    @endpoint(api=True, auth=True)
-    def handle_ping(self, http_context):
-        return {
-            'ok': True,
-            'plugin': 'frigotehnica',
-            'message': 'CAREL Ajenti HTTP plugin is working'
+    def provide(self):
+        return [{
+            'attach': 'category:tools',
+            'name': 'Cloudflare Tunnel',
+            'icon': 'cloud',
+            'url': PROXY_PREFIX,
+            'children': [],
+        }]
+
+
+def _load_secret():
+    try:
+        with open(SECRET_FILE, 'rb') as f:
+            return f.read(256).strip()
+    except (IOError, OSError):
+        return b''
+
+
+def _rewrite_location(location):
+    if not location:
+        return None
+    if location.startswith(UPSTREAM):
+        location = location[len(UPSTREAM):]
+    if location.startswith('/'):
+        return PROXY_PREFIX + location
+    return location
+
+
+@component(HttpMiddleware)
+class FrigotehnicaProxy(HttpMiddleware):
+    """
+    API reverse proxy for the Frigotehnica Tunnel Control backend.
+
+    Runs as a middleware so it executes before the core plugin's catch-all
+    '/view/.*' SPA handler. Only '/view/frigotehnica-tunnel/api/*' is
+    proxied; the bare '/view/frigotehnica-tunnel' path falls through to the
+    Angular SPA, which hosts this plugin's native view. The '/view' prefix
+    is exempt from the CAREL gate XSRF check. Authentication is delegated to
+    Ajenti: the proxy only runs when the worker session has an identity.
+    """
+
+    def handle(self, http_context):
+        path = http_context.path
+        if not path.startswith(PROXY_PREFIX + '/api/'):
+            return None
+
+        if not getattr(self.context, 'identity', None):
+            http_context.respond('401 Unauthorized')
+            http_context.add_header('Content-Type', 'text/plain; charset=utf-8')
+            return 'Unauthenticated'
+
+        secret = _load_secret()
+        if not secret:
+            http_context.respond_server_error()
+            return 'Ajenti proxy secret is unavailable'
+
+        subpath = path[len(PROXY_PREFIX):]
+        target = UPSTREAM + subpath
+        query = http_context.env.get('QUERY_STRING', '')
+        if query:
+            target += '?' + query
+
+        method = http_context.method
+        body = http_context.body if method in ('POST', 'PUT', 'PATCH', 'DELETE') else None
+        headers = {
+            'X-Frigotehnica-Ajenti': secret,
+            'Accept': http_context.env.get('HTTP_ACCEPT', '*/*'),
         }
+        content_type = http_context.env.get('CONTENT_TYPE')
+        if content_type:
+            headers['Content-Type'] = content_type
+
+        request = Request(target, data=body, headers=headers)
+        request.get_method = lambda: method
+        try:
+            response = urlopen(request, timeout=25)
+        except HTTPError as error:
+            response = error
+        except (URLError, IOError, OSError):
+            http_context.respond('502 Bad Gateway')
+            http_context.add_header('Content-Type', 'text/plain; charset=utf-8')
+            return 'Frigotehnica Tunnel Control is unavailable'
+
+        data = response.read()
+        http_context.respond('%d Proxy Response' % response.getcode())
+        for name in RESPONSE_HEADERS:
+            value = response.headers.get(name)
+            if value:
+                http_context.add_header(name, value)
+        location = _rewrite_location(response.headers.get('Location'))
+        if location:
+            http_context.add_header('Location', location)
+        return data
 PY
+	cat > "$plugin_stage/plugin.yml" <<'YAML'
+name: frigotehnica
+author: Frigotehnica
+email: office@frigotehnica.com
+url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
+version: '1.3.0-carel'
+title: 'Frigotehnica Cloudflare Tunnel'
+icon: cloud
+dependencies:
+    - !!python/object:aj.plugins.PluginDependency { plugin_name: core }
+resources:
+    - 'resources/module.js'
+    - 'resources/view.html'
+    - 'resources/style.css'
+    - 'ng:ajenti.frigotehnica'
+YAML
+	install -d -m 0755 "$plugin_stage/resources/build"
+	cat > "$plugin_stage/resources/module.js" <<'JS'
+angular.module('ajenti.frigotehnica', ['core']);
+
+angular.module('core').config(['$routeProvider', function ($routeProvider) {
+  $routeProvider.when('/view/frigotehnica-tunnel', {
+    templateUrl: '/frigotehnica:resources/view.html',
+    controller: 'FrigotehnicaTunnelController'
+  });
+}]);
+
+angular.module('ajenti.frigotehnica').controller('FrigotehnicaTunnelController', ['$scope', '$http', '$timeout', 'pageTitle', function ($scope, $http, $timeout, pageTitle) {
+  pageTitle.set('Cloudflare Tunnel');
+
+  var BASE = '/view/frigotehnica-tunnel';
+
+  $scope.status = null;
+  $scope.token = '';
+  $scope.busy = false;
+  $scope.message = null;
+  $scope.error = null;
+
+  function fail(resp) {
+    $scope.error = (resp && typeof resp.data === 'string' && resp.data) ? resp.data : 'Request failed';
+  }
+
+  $scope.refresh = function () {
+    $scope.error = null;
+    $http.get(BASE + '/api/status').then(function (resp) {
+      $scope.status = resp.data;
+    }, fail);
+  };
+
+  $scope.saveToken = function () {
+    $scope.busy = true;
+    $scope.error = null;
+    $scope.message = null;
+    $http.post(BASE + '/api/token', {token: $scope.token}).then(function () {
+      $scope.message = 'Token saved.';
+      $scope.token = '';
+      $scope.refresh();
+    }, fail)['finally'](function () {
+      $scope.busy = false;
+    });
+  };
+
+  $scope.service = function (action, confirm) {
+    $scope.busy = true;
+    $scope.error = null;
+    $scope.message = null;
+    $http.post(BASE + '/api/service/' + action, confirm ? {confirm: true} : {}).then(function () {
+      $scope.message = 'Done.';
+      $timeout($scope.refresh, 4000);
+    }, fail)['finally'](function () {
+      $scope.busy = false;
+    });
+  };
+
+  $scope.refresh();
+}]);
+JS
+	cat > "$plugin_stage/resources/view.html" <<'HTML'
+<br/>
+
+<div class="frigotehnica-tunnel">
+    <div class="alert alert-danger" ng:if="error">
+        <i class="fa fa-warning"></i> {{error}}
+    </div>
+    <div class="alert alert-success" ng:if="message">{{message}}</div>
+
+    <label>Connection status</label>
+    <progress-spinner ng:hide="status != null"></progress-spinner>
+
+    <div class="list-group" ng:if="status">
+        <div class="list-group-item">
+            <b>{{status.stateLabel}}</b>
+            &mdash; {{status.siteName}} ({{status.hostname}})
+        </div>
+        <div class="list-group-item">
+            cloudflared {{status.version}} ({{status.architecture}}),
+            connections: {{status.connections}},
+            uptime: {{status.uptime}},
+            last check: {{status.lastCheck}}
+        </div>
+        <div class="list-group-item">{{status.serviceDetail}}</div>
+        <div class="list-group-item">
+            Tunnel token:
+            <span class="text-success" ng:if="status.tokenPresent">configured</span>
+            <span class="text-danger" ng:if="!status.tokenPresent">missing</span>
+        </div>
+    </div>
+
+    <div class="form-group frigotehnica-token-group">
+        <label>Cloudflare tunnel token</label>
+        <div class="input-group">
+            <input type="password" ng:model="token" class="form-control" placeholder="eyJ..." autocomplete="off"/>
+            <div class="input-group-btn">
+                <button class="btn btn-primary" ng:click="saveToken()" ng:disabled="busy || token.length < 80">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-default" ng:click="refresh()" ng:disabled="busy">
+        <i class="fa fa-refresh"></i> Refresh
+    </button>
+    <button class="btn btn-default" ng:click="service('restart')" ng:disabled="busy || !status || !status.tokenPresent">
+        <i class="fa fa-refresh"></i> Restart tunnel
+    </button>
+    <button class="btn btn-danger" ng:click="service('stop', true)" ng:disabled="busy || !status || status.state != 'connected'">
+        <i class="fa fa-stop"></i> Stop tunnel
+    </button>
+</div>
+HTML
+	cat > "$plugin_stage/resources/style.css" <<'CSS'
+.frigotehnica-tunnel{max-width:720px}
+.frigotehnica-token-group{margin-top:20px}
+CSS
+	# Prebuilt bundles: CAREL serves 'resources/build/all.*' directly and
+	# inlines plugin.yml HTML resources into all.partials.js. Plain JS/CSS
+	# sources need no compilation, so the bundles are copies of the sources.
+	cp "$plugin_stage/resources/module.js" "$plugin_stage/resources/build/all.js"
+	cp "$plugin_stage/resources/style.css" "$plugin_stage/resources/build/all.css"
+	: > "$plugin_stage/resources/build/all.vendor.js"
+	: > "$plugin_stage/resources/build/all.vendor.css"
 else
+	install -d -m 0755 "$plugin_stage/resources"
 	cat > "$plugin_stage/__init__.py" <<'PY'
 from .main import *
 from .views import *
 PY
-fi
 	cat > "$plugin_stage/main.py" <<'PY'
 from jadi import component
 from aj.plugins.core.api.sidebar import SidebarItemProvider
@@ -367,26 +624,12 @@ class FrigotehnicaProxy(HttpPlugin):
         http_context.add_header('Content-Length', str(len(data)))
         return data
 PY
-if [ "$AJENTI_VARIANT" = carel-boss ]; then
 	cat > "$plugin_stage/plugin.yml" <<'YAML'
 name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.2-rc1'
-title: 'Frigotehnica Cloudflare Tunnel'
-icon: cloud
-dependencies:
-    - !!python/object:aj.plugins.PluginDependency { plugin_name: core }
-resources: []
-YAML
-else
-	cat > "$plugin_stage/plugin.yml" <<'YAML'
-name: frigotehnica
-author: Frigotehnica
-email: office@frigotehnica.com
-url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.0'
+version: '1.3.0'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -397,7 +640,6 @@ resources:
     - 'resources/style.css'
     - 'ng:ajenti.frigotehnica'
 YAML
-fi
 	cat > "$plugin_stage/resources/module.js" <<'JS'
 angular.module('ajenti.frigotehnica', [])
   .config(['$routeProvider', function ($routeProvider) {
@@ -411,6 +653,7 @@ HTML
 	cat > "$plugin_stage/resources/style.css" <<'CSS'
 .frigotehnica-tunnel-view{height:calc(100vh - 90px);min-height:620px;margin:-15px;background:#f3f6fb}.frigotehnica-tunnel-frame{display:block;width:100%;height:100%;border:0;background:#f3f6fb}
 CSS
+fi
 	find "$plugin_stage" -type f -exec chmod 0644 {} \;
 }
 
@@ -534,14 +777,19 @@ if [ -e "$STAGE_DIR/bootstrap.required" ]; then
 fi
 if [ "$AJENTI_ENABLED" = yes ]; then
 	install -m 0600 "$STAGE_DIR/ajenti-proxy.secret" "$CONFIG_DIR/ajenti-proxy.secret"
-	install -d -m 0755 "$AJENTI_PLUGIN_DIR" "$AJENTI_PLUGIN_DIR/resources"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/__init__.py" "$AJENTI_PLUGIN_DIR/__init__.py"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/main.py" "$AJENTI_PLUGIN_DIR/main.py"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/views.py" "$AJENTI_PLUGIN_DIR/views.py"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/plugin.yml" "$AJENTI_PLUGIN_DIR/plugin.yml"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/resources/module.js" "$AJENTI_PLUGIN_DIR/resources/module.js"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/resources/view.html" "$AJENTI_PLUGIN_DIR/resources/view.html"
-	install -m 0644 "$STAGE_DIR/ajenti_plugin_frigotehnica/resources/style.css" "$AJENTI_PLUGIN_DIR/resources/style.css"
+	if [ "$AJENTI_VARIANT" = carel-boss ]; then
+		# The restricted Ajenti worker runs as the webui user; keep the
+		# secret readable for it without exposing it to other accounts.
+		chgrp webui "$CONFIG_DIR/ajenti-proxy.secret" 2>/dev/null || true
+		chmod 0640 "$CONFIG_DIR/ajenti-proxy.secret"
+	fi
+	# The existing plugin directory was already backed up to BACKUP_DIR
+	# (outside the Ajenti plugin search path). Remove it before copying so
+	# stale files from older versions cannot linger, and never keep extra
+	# plugin copies inside the plugin search path.
+	rm -rf "$AJENTI_PLUGIN_DIR"
+	install -d -m 0755 "$AJENTI_PLUGIN_DIR"
+	cp -a "$STAGE_DIR/ajenti_plugin_frigotehnica/." "$AJENTI_PLUGIN_DIR/"
 	info "Ajenti plugin installed to $AJENTI_PLUGIN_DIR"
 fi
 install -m 0755 "$STAGE_DIR/$TUNNEL_SERVICE" /etc/init.d/$TUNNEL_SERVICE

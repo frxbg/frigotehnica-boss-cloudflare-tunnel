@@ -12,12 +12,12 @@ rm -f /etc/init.d/frigotehnica-tunnel-ui
 rm -f /etc/init.d/cloudflared-frigotehnica
 rm -f /opt/frigotehnica/frigotehnica-tunnel-ui
 
-# CAREL BOSS Ajenti plugin location
 if [ -d /home/webui/pvshell-web/plugins/frigotehnica ]; then
 	rm -rf /home/webui/pvshell-web/plugins/frigotehnica
+	[ -x /etc/init.d/plugins ] && AJENTI_SERVICE=plugins
 fi
 
-AJENTI_SERVICE=
+: "${AJENTI_SERVICE:=}"
 for candidate in /opt/ajenti/bin/python3 /opt/ajenti/bin/python /usr/bin/python3 /usr/bin/python; do
 	[ -x "$candidate" ] || continue
 	plugin_dir=$($candidate -c 'import os, ajenti_plugin_core; print(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(ajenti_plugin_core.__file__))), "ajenti_plugin_frigotehnica"))' 2>/dev/null || true)
@@ -38,4 +38,3 @@ echo "Review them manually before removing sensitive configuration."
 if [ -n "$AJENTI_SERVICE" ]; then
 	nohup sh -c "sleep 3; rc-service '$AJENTI_SERVICE' restart" >/dev/null 2>&1 &
 fi
-

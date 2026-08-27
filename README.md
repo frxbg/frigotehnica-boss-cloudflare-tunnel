@@ -75,7 +75,7 @@ also checked against the SHA-256 values embedded in the verified installer.
 For `v1.2.0`, use this exact non-interactive command:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.2.0/install.sh -o /tmp/frigotehnica-install-v1.2.0.sh && echo '7cb973114c98dfc66b91d15ee7142e5b22dc6b520acd5e3083bda545962aa890  /tmp/frigotehnica-install-v1.2.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.2.0.sh --non-interactive
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.2.0/install.sh -o /tmp/frigotehnica-install-v1.2.0.sh && echo '7cb973114c98dfc66b91d15ee7142e5b22dc6b520acd5e3083bda545962aa890  /tmp/frigotehnica-install-v1.2.0.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.2.0.sh --non-interactive --ajenti
 ```
 
 The installer digest is pinned to this release and must not be reused for a

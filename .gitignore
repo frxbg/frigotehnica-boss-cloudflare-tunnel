@@ -1,5 +1,8 @@
 /dist/
 /release/
+/logs/
+.tmp-*/
+__pycache__/
+*.pyc
 *.token
 *password*
-

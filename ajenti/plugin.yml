@@ -1,35 +1,16 @@
-if [ "$AJENTI_VARIANT" = carel-boss ]; then
-	cat > "$plugin_stage/plugin.yml" <<'YAML'
 name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.2-rc2'
+version: '1.3.0'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
-    - !!python/object:aj.plugins.PluginDependency { plugin_name: core }
+    - !PluginDependency {
+        plugin_name: core
+    }
 resources:
     - 'resources/module.js'
     - 'resources/view.html'
     - 'resources/style.css'
     - 'ng:ajenti.frigotehnica'
-YAML
-else
-	cat > "$plugin_stage/plugin.yml" <<'YAML'
-name: frigotehnica
-author: Frigotehnica
-email: office@frigotehnica.com
-url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.2.2-rc2'
-title: 'Frigotehnica Cloudflare Tunnel'
-icon: cloud
-dependencies:
-    - !PluginDependency { plugin_name: core }
-resources:
-    - 'resources/module.js'
-    - 'resources/view.html'
-    - 'resources/style.css'
-    - 'ng:ajenti.frigotehnica'
-YAML
-fi
