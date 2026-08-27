@@ -177,15 +177,15 @@ Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
 because their CA bundle is outdated. Never pipe an unverified download directly
 into a root shell.
 
-The following `v1.3.1` command downloads the installer with legacy TLS mode,
+The following `v1.3.2` command downloads the installer with legacy TLS mode,
 verifies its exact pinned SHA-256 digest, and only then executes it. The verified
 installer also checks the downloaded program binaries:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.1/install.sh -o /tmp/frigotehnica-install-v1.3.1.sh && echo '5dfa7efd4373227609d866ec31c0abf99a4825d06c5128ac2d007148ae4d6c2d  /tmp/frigotehnica-install-v1.3.1.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.1.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.2/install.sh -o /tmp/frigotehnica-install-v1.3.2.sh && echo 'ecf0bef1da93c612c68eda4212ff2b5b5a05fbf884e76309f5544d4908b66a47  /tmp/frigotehnica-install-v1.3.2.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.2.sh --non-interactive --ajenti
 ```
 
-The digest is pinned to `v1.3.1` and must not be reused with another release.
+The digest is pinned to `v1.3.2` and must not be reused with another release.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
