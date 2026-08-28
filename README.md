@@ -45,6 +45,9 @@ Current release: `v1.3.5`
     <li>
       <a href="#usage">Usage</a>
       <ul>
+        <li><a href="#configure-the-cloudflare-tunnel">Configure the Cloudflare Tunnel</a></li>
+        <li><a href="#publish-the-boss-interface">Publish the BOSS interface</a></li>
+        <li><a href="#verify-the-connection">Verify the connection</a></li>
         <li><a href="#upgrade">Upgrade</a></li>
         <li><a href="#ajenti-plugin-only-update">Ajenti plugin-only update</a></li>
         <li><a href="#custom-installation">Custom installation</a></li>
@@ -66,7 +69,7 @@ Current release: `v1.3.5`
 
 Frigotehnica BOSS Cloudflare Tunnel installs the official Cloudflare
 `cloudflared` client and a small local management UI on CAREL BOSS devices
-running Gentoo Linux with OpenRC.
+running an OpenRC-based embedded Linux system, including Gentoo and Buildroot.
 
 When Ajenti is available, the installer adds **Tools → Cloudflare Tunnel** to
 the existing authenticated interface on port `8443`. The management backend
@@ -118,12 +121,14 @@ variants are built and published by the release workflow.
 ### Prerequisites
 
 - CAREL BOSS or compatible embedded Linux device.
-- Gentoo Linux with OpenRC.
+- An OpenRC-based embedded Linux system, such as Gentoo or Buildroot.
 - ARMv7 hard-float or x86_64/amd64 architecture.
 - Root access or a user with `sudo` access.
 - Outbound HTTPS and Cloudflare Tunnel connectivity.
 - `curl` or `wget`, plus `sha256sum`, `install`, and standard POSIX utilities.
 - A remotely managed Cloudflare Tunnel token.
+- A Cloudflare account and, when publishing the BOSS interface, a domain active
+  on Cloudflare.
 
 ### Installation
 
@@ -224,6 +229,102 @@ The digest is pinned to `v1.3.5` and must not be reused with another release.
 Use the Ajenti panel or standalone UI to view tunnel health, replace the token,
 and control the `cloudflared` service. Tokens and passwords are never accepted
 as command-line arguments.
+
+### Configure the Cloudflare Tunnel
+
+The panel accepts a **remotely-managed Cloudflare Tunnel connector token**. It
+does not accept a Cloudflare API token, Global API Key, Tunnel ID, or locally
+managed tunnel credentials file.
+
+1. Sign in to the Cloudflare dashboard and open
+   **Networking → Tunnels**.
+2. Select **Create a tunnel**, enter a descriptive name such as
+   `boss-site-name`, and create the tunnel.
+3. On the connector setup page, choose a Linux environment. Do not run the
+   displayed Cloudflare installation command on the BOSS: this project already
+   installs and manages the correct `cloudflared` binary and OpenRC service.
+4. Copy only the connector token from the displayed command. It is the long
+   value after `--token` and normally begins with `eyJ`.
+5. Open the CAREL administration interface on port `8443`, then select
+   **Tools → Cloudflare Tunnel**.
+6. Paste the connector token into **Cloudflare tunnel token** and select
+   **Save**. The panel validates the token, stores it with restricted
+   permissions, and restarts the tunnel service.
+
+![CAREL BOSS Cloudflare Tunnel connection status and token controls](docs/images/tunnel-control.png)
+
+Cloudflare's current dashboard workflow is documented in
+[Create a tunnel (dashboard)](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel/).
+
+> [!CAUTION]
+> Treat the connector token as a secret. Do not paste it into terminal commands,
+> screenshots, issue reports, source control, or chat messages. If it is
+> exposed, rotate the tunnel token in Cloudflare and save the replacement in
+> the panel.
+
+### Publish the BOSS interface
+
+After the connector becomes healthy, add a route from the public hostname to
+the standard BOSS HTTPS interface:
+
+1. In Cloudflare, open **Networking → Tunnels** and select the tunnel.
+2. Open **Routes**, select **Add route**, and choose
+   **Published application**.
+3. Select the public hostname, for example `boss-site.example.com`.
+4. Under **Service**, set **Type** to `HTTPS`.
+5. Set **URL** to:
+
+   ```text
+   127.0.0.1:443
+   ```
+
+6. Expand **Origin request and connection settings**, open **TLS**, and enable
+   **No TLS Verify**. Leave **Origin Server Name** and
+   **Certificate Authority Pool** empty. This is required for the default BOSS
+   certificate, which cannot be validated for the loopback address.
+7. Save the route. With a full Cloudflare DNS setup, the dashboard creates the
+   tunnel DNS record automatically.
+
+![Cloudflare published application route using HTTPS on 127.0.0.1:443 with No TLS Verify enabled](docs/images/Published-application-routes.png)
+
+See Cloudflare's documentation for
+[published application routes](https://developers.cloudflare.com/tunnel/setup/)
+and [origin TLS parameters](https://developers.cloudflare.com/tunnel/advanced/origin-parameters/).
+Because this route connects `cloudflared` to the BOSS service through the local
+loopback interface, the unverified origin TLS hop is not exposed on the LAN or
+Internet. The browser-to-Cloudflare connection remains protected by
+Cloudflare's edge certificate.
+
+> [!IMPORTANT]
+> A published application without an Access policy can be reachable by anyone
+> on the Internet. Protect the hostname with a Cloudflare Access self-hosted
+> application and an explicit Allow policy for authorized users. Follow
+> [Cloudflare's self-hosted application guide](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/).
+
+The Cloudflare route should normally target port `443`, not the Ajenti
+administration interface on port `8443`. Keep `8443` limited to a trusted LAN,
+VPN, or a separately protected administrative route.
+
+### Verify the connection
+
+Return to **Tools → Cloudflare Tunnel** and select **Refresh**. A healthy
+installation should show:
+
+- **Connected**;
+- **OpenRC service is running**;
+- **Tunnel token: valid**;
+- the expected **Tunnel ID**;
+- normally four registered Cloudflare connections.
+
+In the Cloudflare dashboard, the same tunnel should become **Healthy**. Finally,
+open the configured public hostname in a private browser window and confirm
+that Cloudflare Access appears before the BOSS login page.
+
+If the tunnel remains inactive, verify that the BOSS has a default route, DNS
+resolution, correct system time, and outbound connectivity to Cloudflare. A
+restrictive firewall must permit the connector traffic required by Cloudflare;
+refer to the official
+[Cloudflare Tunnel troubleshooting guide](https://developers.cloudflare.com/tunnel/troubleshooting/).
 
 ### Upgrade
 
