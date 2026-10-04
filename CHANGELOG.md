@@ -2,6 +2,29 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Added a loopback-only BOSS web proxy on `127.0.0.1:9081` to preserve browser
+  file uploads and downloads through Cloudflare Tunnel. Its connection to
+  BOSS uses source `127.0.0.2` and the public Host header so BOSS does not
+  select local-console file dialogs. This removes dependence on a LAN IP
+  without modifying CAREL application files or trusting forwarded headers.
+- Added a separate OpenRC boot service and `--boss-proxy-only` installer mode
+  with checksum verification and backups. Proxy-only installation leaves
+  CAREL, Ajenti, Tunnel Control, cloudflared, and credentials untouched.
+- Added multipart upload, download, cookie/redirect, origin failure, and
+  loopback restriction regression tests. No external Go dependencies added.
+
+### Migration
+
+- After installing the proxy, change only the BOSS web route to HTTP at
+  `127.0.0.1:9081`, leaving HTTP Host Header empty. Existing routes are not
+  changed automatically. Keep the old route value for rollback.
+- This change does not require a cloudflared upgrade. Boot and firmware
+  behavior still depend on the device retaining third-party OpenRC services.
+
 ## [1.3.5] - 2026-08-27
 
 ### Fixed

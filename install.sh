@@ -8,6 +8,10 @@ UI_BINARY=$APP_DIR/frigotehnica-tunnel-ui
 CLOUDFLARED_BINARY=$APP_DIR/cloudflared
 TUNNEL_SERVICE=cloudflared-frigotehnica
 UI_SERVICE=frigotehnica-tunnel-ui
+BOSS_PROXY_SERVICE=frigotehnica-boss-proxy
+BOSS_PROXY_BINARY=$APP_DIR/frigotehnica-boss-proxy
+BOSS_PROXY_ONLY=no
+BOSS_PROXY_ENABLED=no
 UI_ARMV7_SHA256=a492ed5a5c136addce780806ae1fa8cd95b734f0c527029f604e51fa02839628
 UI_AMD64_SHA256=PINNED_BY_RELEASE_WORKFLOW
 CLOUDFLARED_ARMV7_SHA256=8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5
@@ -46,6 +50,7 @@ Options:
   --non-interactive        Install UI without prompting; print a one-time password
   --ajenti                 Require authenticated Ajenti integration on port 8443
   --plugin-only            Update only the Ajenti plugin; keep binaries, secrets, and services
+  --boss-proxy-only        Install/update only the loopback BOSS upload proxy
   --no-ajenti              Disable automatic Ajenti integration
   --release-base-url URL   Download missing release assets from URL
   --no-enable              Do not add services to the OpenRC default runlevel
@@ -69,6 +74,7 @@ while [ "$#" -gt 0 ]; do
 		--non-interactive) NON_INTERACTIVE=yes; shift ;;
 		--ajenti) AJENTI_MODE=yes; shift ;;
 		--plugin-only) PLUGIN_ONLY=yes; AJENTI_MODE=yes; shift ;;
+		--boss-proxy-only) BOSS_PROXY_ONLY=yes; shift ;;
 		--no-ajenti) AJENTI_MODE=no; shift ;;
 		--release-base-url) [ "$#" -ge 2 ] || die "--release-base-url requires a value"; RELEASE_BASE_URL=${2%/}; shift 2 ;;
 		--no-enable) ENABLE_BOOT=no; shift ;;
@@ -77,6 +83,14 @@ while [ "$#" -gt 0 ]; do
 		*) die "unknown option: $1" ;;
 	esac
 done
+
+[ "$PLUGIN_ONLY" != yes ] || [ "$BOSS_PROXY_ONLY" != yes ] || die "choose only one update-only mode"
+if [ "$BOSS_PROXY_ONLY" = yes ]; then
+	AJENTI_MODE=no
+fi
+if [ "$BOSS_PROXY_ONLY" = yes ] || [ -d /home/pvprox/Carel/engine/jetty/webapps/boss ] || [ -e /etc/init.d/$BOSS_PROXY_SERVICE ]; then
+	BOSS_PROXY_ENABLED=yes
+fi
 
 [ "$(id -u)" -eq 0 ] || die "run this installer as root"
 case "$(uname -m)" in
@@ -191,7 +205,7 @@ elif [ "$AJENTI_MODE" = yes ]; then
 fi
 
 if [ -z "$LISTEN_ADDRESS" ]; then
-	if [ "$AJENTI_ENABLED" = yes ]; then
+	if [ "$AJENTI_ENABLED" = yes ] || [ "$BOSS_PROXY_ONLY" = yes ]; then
 		LISTEN_ADDRESS=127.0.0.1:9080
 	else
 		detected_ip=$(detect_lan_ip || true)
@@ -266,11 +280,65 @@ verify_asset() {
 
 if [ "$PLUGIN_ONLY" != yes ]; then
 	fetch_asset "$UI_ASSET" "$STAGE_DIR/$UI_ASSET"
-	fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
 	verify_asset "$STAGE_DIR/$UI_ASSET" "$UI_SHA256"
-	verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
-	chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
+	chmod 0755 "$STAGE_DIR/$UI_ASSET"
+	if [ "$BOSS_PROXY_ONLY" != yes ]; then
+		fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
+		verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
+		chmod 0755 "$STAGE_DIR/$CLOUDFLARED_ASSET"
+	fi
 	info "Release asset checksums verified"
+fi
+
+install_boss_proxy() {
+	cat > "$STAGE_DIR/$BOSS_PROXY_SERVICE" <<'EOF'
+#!/sbin/openrc-run
+
+description="Loopback BOSS web proxy with remote file upload support"
+command="/opt/frigotehnica/frigotehnica-boss-proxy"
+command_args="boss-proxy"
+command_background=true
+pidfile="/var/run/frigotehnica-boss-proxy.pid"
+output_log="/opt/frigotehnica/logs/boss-proxy.log"
+error_log="/opt/frigotehnica/logs/boss-proxy.log"
+retry="TERM/25/KILL/5"
+
+depend() { use logger; after localmount net; before cloudflared-frigotehnica; }
+
+start_pre() {
+	[ -x "${command}" ] || { eerror "Missing BOSS proxy binary"; return 1; }
+	touch "${output_log}" && chmod 0600 "${output_log}"
+}
+EOF
+	if [ -e "$BOSS_PROXY_BINARY" ] || [ -e /etc/init.d/$BOSS_PROXY_SERVICE ]; then
+		install -d -m 0700 "$BACKUP_DIR"
+		[ ! -e "$BOSS_PROXY_BINARY" ] || cp -p "$BOSS_PROXY_BINARY" "$BACKUP_DIR/boss-proxy.binary"
+		[ ! -e /etc/init.d/$BOSS_PROXY_SERVICE ] || cp -p /etc/init.d/$BOSS_PROXY_SERVICE "$BACKUP_DIR/boss-proxy.service"
+		info "Existing BOSS proxy backed up to $BACKUP_DIR"
+	fi
+	# Prepare the replacement before stopping the running proxy.
+	install -m 0755 "$STAGE_DIR/$UI_ASSET" "$BOSS_PROXY_BINARY.new"
+	if rc-service "$BOSS_PROXY_SERVICE" status >/dev/null 2>&1; then
+		rc-service "$BOSS_PROXY_SERVICE" stop
+	fi
+	mv -f "$BOSS_PROXY_BINARY.new" "$BOSS_PROXY_BINARY"
+	install -m 0755 "$STAGE_DIR/$BOSS_PROXY_SERVICE" /etc/init.d/$BOSS_PROXY_SERVICE
+	if [ "$ENABLE_BOOT" = yes ]; then
+		rc-update add "$BOSS_PROXY_SERVICE" default >/dev/null
+	fi
+	if [ "$START_SERVICES" = yes ]; then
+		rc-service "$BOSS_PROXY_SERVICE" start
+		sleep 2
+		rc-service "$BOSS_PROXY_SERVICE" status >/dev/null 2>&1 || die "BOSS proxy did not start"
+	fi
+	info "BOSS proxy installed. Cloudflare BOSS route: HTTP, URL 127.0.0.1:9081. Leave HTTP Host Header empty."
+	info "The Cloudflare route is not changed automatically. Verify the BOSS login and upload dialog after changing it."
+}
+
+if [ "$BOSS_PROXY_ONLY" = yes ]; then
+	install_boss_proxy
+	info "BOSS proxy updated; CAREL, Ajenti, Tunnel Control, cloudflared, and secrets were not changed"
+	exit 0
 fi
 
 stage_ajenti_plugin() {
@@ -849,6 +917,10 @@ if [ "$AJENTI_ENABLED" = yes ]; then
 fi
 install -m 0755 "$STAGE_DIR/$TUNNEL_SERVICE" /etc/init.d/$TUNNEL_SERVICE
 install -m 0755 "$STAGE_DIR/$UI_SERVICE" /etc/init.d/$UI_SERVICE
+
+if [ "$BOSS_PROXY_ENABLED" = yes ]; then
+	install_boss_proxy
+fi
 
 if [ "$ENABLE_BOOT" = yes ]; then
 	rc-update add "$TUNNEL_SERVICE" default >/dev/null

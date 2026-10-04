@@ -3,7 +3,7 @@ set -eu
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root" >&2; exit 1; }
 
-for service in frigotehnica-tunnel-ui cloudflared-frigotehnica; do
+for service in frigotehnica-boss-proxy frigotehnica-tunnel-ui cloudflared-frigotehnica; do
 	rc-service "$service" stop 2>/dev/null || true
 	rc-update del "$service" default 2>/dev/null || true
 done
@@ -11,6 +11,8 @@ done
 rm -f /etc/init.d/frigotehnica-tunnel-ui
 rm -f /etc/init.d/cloudflared-frigotehnica
 rm -f /opt/frigotehnica/frigotehnica-tunnel-ui
+rm -f /etc/init.d/frigotehnica-boss-proxy
+rm -f /opt/frigotehnica/frigotehnica-boss-proxy
 
 if [ -d /home/webui/pvshell-web/plugins/frigotehnica ]; then
 	rm -rf /home/webui/pvshell-web/plugins/frigotehnica
