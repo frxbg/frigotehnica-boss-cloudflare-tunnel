@@ -81,6 +81,12 @@ type statusResponse struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "boss-proxy" {
+		if err := runBossProxy(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	var cfg config
 	flag.StringVar(&cfg.listen, "listen", "127.0.0.1:9080", "listen address")
 	flag.StringVar(&cfg.authFile, "auth-file", "/opt/frigotehnica/config/admin.auth", "admin password hash file")

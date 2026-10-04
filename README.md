@@ -92,6 +92,8 @@ endorsed by CAREL or Cloudflare.
 - Non-interactive bootstrap for restricted browser terminals.
 - OpenRC boot services, upgrade backups, and safe uninstall.
 - Separate Ajenti plugin-only update mode.
+- Loopback BOSS web proxy for remote uploads, independent of the LAN address
+  (unreleased; see below).
 
 ### Architecture support
 
@@ -264,36 +266,53 @@ Cloudflare's current dashboard workflow is documented in
 
 ### Publish the BOSS interface
 
-After the connector becomes healthy, add a route from the public hostname to
-the standard BOSS HTTPS interface:
+The new BOSS upload proxy is currently available from source (not in `v1.3.5`).
+Install a build containing this change before using port `9081`. The full
+installer detects the standard BOSS installation and installs the proxy;
+`--boss-proxy-only` updates only this component on existing devices. It does
+not restart CAREL, Ajenti, or the tunnel, and does not require the tunnel token.
+
+After the connector and proxy become healthy, add a route from the public
+hostname to the local BOSS proxy:
 
 1. In Cloudflare, open **Networking → Tunnels** and select the tunnel.
 2. Open **Routes**, select **Add route**, and choose
    **Published application**.
 3. Select the public hostname, for example `boss-site.example.com`.
-4. Under **Service**, set **Type** to `HTTPS`.
+4. Under **Service**, set **Type** to `HTTP`.
 5. Set **URL** to:
 
    ```text
-   127.0.0.1:443
+   127.0.0.1:9081
    ```
 
-6. Expand **Origin request and connection settings**, open **TLS**, and enable
-   **No TLS Verify**. Leave **Origin Server Name** and
-   **Certificate Authority Pool** empty. This is required for the default BOSS
-   certificate, which cannot be validated for the loopback address.
+6. Leave **HTTP Host Header** empty so BOSS receives the public hostname.
+   No TLS setting is needed for this local HTTP hop.
 7. Save the route. With a full Cloudflare DNS setup, the dashboard creates the
    tunnel DNS record automatically.
-
-![Cloudflare published application route using HTTPS on 127.0.0.1:443 with No TLS Verify enabled](docs/images/Published-application-routes.png)
 
 See Cloudflare's documentation for
 [published application routes](https://developers.cloudflare.com/tunnel/setup/)
 and [origin TLS parameters](https://developers.cloudflare.com/tunnel/advanced/origin-parameters/).
-Because this route connects `cloudflared` to the BOSS service through the local
-loopback interface, the unverified origin TLS hop is not exposed on the LAN or
-Internet. The browser-to-Cloudflare connection remains protected by
-Cloudflare's edge certificate.
+
+The proxy listens only on `127.0.0.1:9081` and connects to the fixed origin
+`https://127.0.0.1:443` using source address `127.0.0.2`. BOSS 1.15 identifies
+`127.0.0.1` requests as its local console and hides browser file inputs; the
+separate loopback source and preserved public Host keep remote file handling.
+No LAN IP, DHCP reservation, extra network interface, forwarded-header trust,
+or CAREL application patch is required. Both origin hops stay on the device;
+the proxy accepts the vendor's self-signed certificate only for its fixed
+loopback origin. Browser-to-Cloudflare HTTPS remains unchanged.
+
+Uploads and downloads are streamed without the management panel's 8 KiB limit.
+BOSS and Cloudflare's own upload size/time limits still apply. BOSS login,
+sessions, and authorization continue to be enforced by BOSS. This component
+does not proxy the Ajenti or SSH ports. Keep their existing routes unchanged.
+
+For `v1.3.5` without the new proxy, use the device's reserved/static LAN IP as
+an interim HTTPS origin with **No TLS Verify** enabled. Direct
+`https://127.0.0.1:443` routes can show only **FTP folder** in file dialogs.
+After migration, sign in again and check an upload dialog and a download.
 
 > [!IMPORTANT]
 > A published application without an Access policy can be reachable by anyone
@@ -301,8 +320,8 @@ Cloudflare's edge certificate.
 > application and an explicit Allow policy for authorized users. Follow
 > [Cloudflare's self-hosted application guide](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/).
 
-The Cloudflare route should normally target port `443`, not the Ajenti
-administration interface on port `8443`. Keep `8443` limited to a trusted LAN,
+The BOSS web route targets the proxy on `9081`, which forwards only to `443`.
+Keep the Ajenti administration interface on `8443` limited to a trusted LAN,
 VPN, or a separately protected administrative route.
 
 ### Verify the connection
@@ -394,6 +413,9 @@ sudo rc-service cloudflared-frigotehnica restart
 
 sudo rc-service frigotehnica-tunnel-ui status
 sudo rc-service frigotehnica-tunnel-ui restart
+
+sudo rc-service frigotehnica-boss-proxy status
+sudo rc-service frigotehnica-boss-proxy restart
 ```
 
 ### Uninstall
@@ -412,12 +434,14 @@ data loss. Review `/opt/frigotehnica` before removing retained data manually.
 ```text
 /opt/frigotehnica/cloudflared
 /opt/frigotehnica/frigotehnica-tunnel-ui
+/opt/frigotehnica/frigotehnica-boss-proxy
 /opt/frigotehnica/config/tunnel.token
 /opt/frigotehnica/config/admin.auth
 /opt/frigotehnica/config/ajenti-proxy.secret
 /opt/frigotehnica/logs/
 /etc/init.d/cloudflared-frigotehnica
 /etc/init.d/frigotehnica-tunnel-ui
+/etc/init.d/frigotehnica-boss-proxy
 ```
 
 Depending on the detected Ajenti variant, one of these plugin directories is
@@ -457,6 +481,7 @@ or proprietary vendor files.
 - [x] Native CAREL BOSS Ajenti integration.
 - [x] Non-interactive and legacy-CA installation modes.
 - [x] Ajenti plugin-only updates.
+- [x] LAN-independent BOSS remote upload proxy and proxy-only updates (unreleased).
 - [ ] Add automated integration tests against representative BOSS firmware
   environments.
 

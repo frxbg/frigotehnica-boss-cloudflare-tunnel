@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+description="Loopback BOSS web proxy with remote file upload support"
+command="/opt/frigotehnica/frigotehnica-boss-proxy"
+command_args="boss-proxy"
+command_background=true
+pidfile="/var/run/frigotehnica-boss-proxy.pid"
+output_log="/opt/frigotehnica/logs/boss-proxy.log"
+error_log="/opt/frigotehnica/logs/boss-proxy.log"
+retry="TERM/25/KILL/5"
+
+depend() { use logger; after localmount net; before cloudflared-frigotehnica; }
+
+start_pre() {
+	[ -x "${command}" ] || { eerror "Missing BOSS proxy binary"; return 1; }
+	touch "${output_log}" && chmod 0600 "${output_log}"
+}
