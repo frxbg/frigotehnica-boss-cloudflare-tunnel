@@ -83,13 +83,13 @@ case "$(uname -m)" in
 	armv7l|armv7*)
 		UI_ASSET=frigotehnica-tunnel-ui-linux-armv7
 		UI_SHA256=$UI_ARMV7_SHA256
-		CLOUDFLARED_ASSET=cloudflared-linux-armhf-2026.8.2
+		CLOUDFLARED_ASSET=cloudflared-linux-armhf
 		CLOUDFLARED_SHA256=$CLOUDFLARED_ARMV7_SHA256
 		;;
 	x86_64|amd64)
 		UI_ASSET=frigotehnica-tunnel-ui-linux-amd64
 		UI_SHA256=$UI_AMD64_SHA256
-		CLOUDFLARED_ASSET=cloudflared-linux-amd64-2026.8.2
+		CLOUDFLARED_ASSET=cloudflared-linux-amd64
 		CLOUDFLARED_SHA256=$CLOUDFLARED_AMD64_SHA256
 		;;
 	*) die "unsupported architecture: $(uname -m); supported: ARMv7 and x86_64" ;;
