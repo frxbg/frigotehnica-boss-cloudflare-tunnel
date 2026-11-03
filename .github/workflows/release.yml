@@ -31,16 +31,33 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: go build -trimpath -ldflags "-s -w" -o frigotehnica-tunnel-ui-linux-amd64 .
-      - name: Download and verify cloudflared
+      - name: Download and verify latest stable cloudflared
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fL --proto '=https' --tlsv1.2 \
-            -o cloudflared-linux-armhf-2026.8.2 \
-            https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-armhf
-          curl -fL --proto '=https' --tlsv1.2 \
-            -o cloudflared-linux-amd64-2026.8.2 \
-            https://github.com/cloudflare/cloudflared/releases/download/2026.8.2/cloudflared-linux-amd64
-          echo "8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5  cloudflared-linux-armhf-2026.8.2" | sha256sum -c -
-          echo "fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2  cloudflared-linux-amd64-2026.8.2" | sha256sum -c -
+          set -euo pipefail
+          release=$(gh api repos/cloudflare/cloudflared/releases/latest)
+          echo "Packaging cloudflared $(jq -r '.tag_name' <<< "$release")"
+
+          for arch in armhf amd64; do
+            asset="cloudflared-linux-$arch"
+            url=$(jq -er --arg name "$asset" \
+              '.assets[] | select(.name == $name) | .browser_download_url' <<< "$release")
+            digest=$(jq -er --arg name "$asset" \
+              '.assets[] | select(.name == $name) | .digest' <<< "$release")
+
+            [[ "$digest" =~ ^sha256:[0-9a-fA-F]{64}$ ]]
+            sha=${digest#sha256:}
+            curl -fsSL --retry 3 "$url" -o "$asset"
+            printf '%s  %s\n' "$sha" "$asset" | sha256sum -c -
+
+            case "$arch" in
+              armhf) key=CLOUDFLARED_ARMV7_SHA256 ;;
+              amd64) key=CLOUDFLARED_AMD64_SHA256 ;;
+            esac
+            sed -i "s/^${key}=.*/${key}=${sha}/" install.sh
+          done
       - name: Normalize script line endings
         run: |
           sed -i 's/\r$//' install.sh uninstall.sh
@@ -57,8 +74,8 @@ jobs:
           files: |
             frigotehnica-tunnel-ui-linux-armv7
             frigotehnica-tunnel-ui-linux-amd64
-            cloudflared-linux-armhf-2026.8.2
-            cloudflared-linux-amd64-2026.8.2
+            cloudflared-linux-armhf
+            cloudflared-linux-amd64
             install.sh
             uninstall.sh
             SHA256SUMS
