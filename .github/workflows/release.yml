@@ -68,7 +68,13 @@ jobs:
           sed -i "s/^UI_ARMV7_SHA256=.*/UI_ARMV7_SHA256=$arm_sha/" install.sh
           sed -i "s/^UI_AMD64_SHA256=.*/UI_AMD64_SHA256=$amd64_sha/" install.sh
       - name: Checksums
-        run: sha256sum frigotehnica-tunnel-ui-linux-armv7 frigotehnica-tunnel-ui-linux-amd64 cloudflared-linux-armhf-2026.8.2 cloudflared-linux-amd64-2026.8.2 install.sh uninstall.sh > SHA256SUMS
+        run: |
+          sha256sum \
+            frigotehnica-tunnel-ui-linux-armv7 \
+            frigotehnica-tunnel-ui-linux-amd64 \
+            cloudflared-linux-armhf \
+            cloudflared-linux-amd64 \
+            install.sh uninstall.sh > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: |
