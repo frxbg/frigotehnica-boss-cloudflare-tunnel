@@ -20,7 +20,7 @@
   </p>
 </div>
 
-Current release: `v1.3.5`
+Current release: `v1.3.7`
 
 <details>
   <summary>Table of contents</summary>
@@ -206,21 +206,21 @@ Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
 because their CA bundle is outdated. Never pipe an unverified download directly
 into a root shell.
 
-The following `v1.3.5` command downloads the installer with legacy TLS mode,
+The following `v1.3.7` command downloads the installer with legacy TLS mode,
 verifies its exact pinned SHA-256 digest, and only then executes it. The verified
 installer also checks the downloaded program binaries:
 
 ```sh
-curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh -o /tmp/frigotehnica-install-v1.3.5.sh && echo '5fe4579a97143974763e3c2beeaf1c267c7d39f80c5682e44a5225b313974870  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
+curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7/install.sh -o /tmp/frigotehnica-install-v1.3.7.sh && echo 'f1a180cef3206bfc43158a5339564968214c98d08ae4a342b4c39496df2a4255  /tmp/frigotehnica-install-v1.3.7.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.7.sh --release-base-url https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7 --non-interactive --ajenti
 ```
 
 For a legacy-CA system with `wget` but no `curl`, use:
 
 ```sh
-wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.5.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.5/install.sh && echo '5fe4579a97143974763e3c2beeaf1c267c7d39f80c5682e44a5225b313974870  /tmp/frigotehnica-install-v1.3.5.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.5.sh --non-interactive --ajenti
+wget --no-check-certificate -qO /tmp/frigotehnica-install-v1.3.7.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7/install.sh && echo 'f1a180cef3206bfc43158a5339564968214c98d08ae4a342b4c39496df2a4255  /tmp/frigotehnica-install-v1.3.7.sh' | sha256sum -c - && env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.7.sh --release-base-url https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7 --non-interactive --ajenti
 ```
 
-The digest is pinned to `v1.3.5` and must not be reused with another release.
+The digest is pinned to `v1.3.7` and must not be reused with another release.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -327,6 +327,8 @@ refer to the official
 [Cloudflare Tunnel troubleshooting guide](https://developers.cloudflare.com/tunnel/troubleshooting/).
 
 ### Upgrade
+
+For systems with an outdated CA bundle, use the [legacy CA upgrade commands](#legacy-ca-certificates).
 
 Run the normal installation command again:
 
