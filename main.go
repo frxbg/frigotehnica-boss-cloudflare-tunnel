@@ -42,6 +42,7 @@ const (
 type config struct {
 	listen, authFile, bootstrapFile, proxySecretFile, tokenFile, cloudflared, service, logFile string
 	siteName, hostname                                                                         string
+	updateConfigFile                                                                           string
 	demo, demoBootstrap, demoAjenti                                                            bool
 }
 
@@ -51,13 +52,15 @@ type session struct {
 }
 
 type server struct {
-	cfg      config
-	tpl      *template.Template
-	mu       sync.Mutex
-	sessions map[string]session
-	attempts map[string][]time.Time
-	demoUp   bool
-	started  time.Time
+	cfg           config
+	tpl           *template.Template
+	mu            sync.Mutex
+	sessions      map[string]session
+	attempts      map[string][]time.Time
+	demoUp        bool
+	started       time.Time
+	settingsMu    sync.Mutex
+	updateService func(context.Context, bool) error
 }
 
 type statusResponse struct {
@@ -101,6 +104,7 @@ func main() {
 	flag.BoolVar(&cfg.demoBootstrap, "demo-bootstrap", false, "show forced password setup in demo mode")
 	flag.BoolVar(&cfg.demoAjenti, "demo-ajenti", false, "simulate Ajenti authentication in demo mode")
 	flag.Parse()
+	cfg.updateConfigFile = updates.configPath
 	if handled, err := updates.command(cfg, flag.Args()); handled {
 		if err != nil {
 			log.Fatal(err)
@@ -148,6 +152,8 @@ func main() {
 	mux.HandleFunc("POST /api/service/{action}", s.requireAuth(s.requireCSRF(s.serviceAction)))
 	mux.HandleFunc("POST /api/token", s.requireAuth(s.requireCSRF(s.updateToken)))
 	mux.HandleFunc("POST /api/password", s.requireAuth(s.requireCSRF(s.updatePassword)))
+	mux.HandleFunc("GET /api/settings", s.requireAuth(s.getSettings))
+	mux.HandleFunc("POST /api/settings", s.requireAuth(s.requireCSRF(s.saveSettings)))
 
 	h := s.securityHeaders(http.MaxBytesHandler(mux, maxBody))
 	httpServer := &http.Server{Addr: cfg.listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
@@ -336,8 +342,9 @@ func sameOrigin(r *http.Request) bool {
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
 	sess, _ := s.currentSession(r)
 	externalAuth := s.trustedProxyRequest(r)
+	siteName, hostname := s.siteIdentity()
 	w.Header().Set("Cache-Control", "no-store")
-	_ = s.tpl.ExecuteTemplate(w, "index.html", map[string]any{"CSRF": sess.csrf, "SiteName": s.cfg.siteName, "Hostname": s.cfg.hostname, "ExternalAuth": externalAuth})
+	_ = s.tpl.ExecuteTemplate(w, "index.html", map[string]any{"CSRF": sess.csrf, "SiteName": siteName, "Hostname": hostname, "ExternalAuth": externalAuth})
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
@@ -407,7 +414,8 @@ func (s *server) collectStatus(ctx context.Context, externalAuth bool) statusRes
 		diagnostics = []string{"Copy the token from the target tunnel's Add a replica command."}
 	}
 	originOK := probeOrigin()
-	return statusResponse{State: state, StateLabel: label, SiteName: s.cfg.siteName, Hostname: s.cfg.hostname, Version: version, Architecture: runtime.GOARCH, Uptime: uptime, LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, TokenValid: tokenValid, TunnelID: tunnelID, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: !externalAuth && s.passwordChangeRequired(), ExternalAuth: externalAuth}
+	siteName, hostname := s.siteIdentity()
+	return statusResponse{State: state, StateLabel: label, SiteName: siteName, Hostname: hostname, Version: version, Architecture: runtime.GOARCH, Uptime: uptime, LastCheck: time.Now().Format("15:04:05"), Connections: connections, TokenPresent: tokenPresent, TokenValid: tokenValid, TunnelID: tunnelID, OriginOK: originOK, Diagnostics: diagnostics, ServiceDetail: detail, PasswordChangeRequired: !externalAuth && s.passwordChangeRequired(), ExternalAuth: externalAuth}
 }
 
 func openRCServiceUptime(service string) (time.Duration, bool) {

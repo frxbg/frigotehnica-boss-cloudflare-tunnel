@@ -166,6 +166,46 @@ $('#savePasswordBtn').addEventListener('click', async () => {
   }
 });
 
+function fillSettings(settings) {
+  $('#siteNameInput').value = settings.siteName;
+  $('#hostnameInput').value = settings.hostname;
+  $('#updateIntervalInput').value = settings.intervalHours;
+  $('#autoUpdateInput').checked = settings.autoUpdateEnabled;
+}
+
+async function loadSettings() {
+  try {
+    fillSettings(await api('/api/settings'));
+    $('#settingsForm').querySelectorAll('input, button').forEach(el => { el.disabled = false; });
+    $('#settingsMessage').textContent = '';
+  } catch {
+    $('#settingsMessage').textContent = 'Settings could not be loaded. Reload the page to retry.';
+  }
+}
+
+$('#settingsForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('#saveSettingsBtn');
+  button.disabled = true;
+  $('#settingsMessage').textContent = 'Saving…';
+  try {
+    const settings = await api('/api/settings', {method: 'POST', body: JSON.stringify({
+      siteName: $('#siteNameInput').value,
+      hostname: $('#hostnameInput').value,
+      autoUpdateEnabled: $('#autoUpdateInput').checked,
+      intervalHours: Number($('#updateIntervalInput').value)
+    })});
+    fillSettings(settings);
+    $('#settingsMessage').textContent = 'Settings saved.';
+    await refresh();
+  } catch (error) {
+    $('#settingsMessage').textContent = error.message.trim() || 'Settings could not be saved.';
+  } finally {
+    button.disabled = false;
+  }
+});
+
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('en-GB'); }, 1000);
 refresh();
+loadSettings();
 setInterval(refresh, 15000);

@@ -36,9 +36,11 @@ type updateOptions struct {
 }
 
 type updateConfig struct {
-	Enabled       bool `json:"enabled"`
-	IntervalHours int  `json:"intervalHours"`
-	LegacyCA      bool `json:"legacyCA"`
+	Enabled       bool   `json:"enabled"`
+	IntervalHours int    `json:"intervalHours"`
+	LegacyCA      bool   `json:"legacyCA"`
+	SiteName      string `json:"siteName,omitempty"`
+	Hostname      string `json:"hostname,omitempty"`
 }
 
 type updateResult struct {

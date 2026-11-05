@@ -488,6 +488,10 @@ angular.module('ajenti.frigotehnica').controller('FrigotehnicaTunnelController',
   $scope.busy = false;
   $scope.message = null;
   $scope.error = null;
+  $scope.settings = null;
+  $scope.settingsBusy = false;
+  $scope.settingsMessage = null;
+  $scope.settingsError = null;
 
   function fail(resp) {
     $scope.error = (resp && typeof resp.data === 'string' && resp.data) ? resp.data : 'Request failed';
@@ -525,6 +529,26 @@ angular.module('ajenti.frigotehnica').controller('FrigotehnicaTunnelController',
     });
   };
 
+  $scope.saveSettings = function () {
+    $scope.settingsBusy = true;
+    $scope.settingsMessage = null;
+    $scope.settingsError = null;
+    $http.post(BASE + '/api/settings', $scope.settings).then(function (resp) {
+      $scope.settings = resp.data;
+      $scope.settingsMessage = 'Settings saved.';
+      $scope.refresh();
+    }, function (resp) {
+      $scope.settingsError = (resp && typeof resp.data === 'string' && resp.data) ? resp.data : 'Settings could not be saved.';
+    })['finally'](function () {
+      $scope.settingsBusy = false;
+    });
+  };
+
+  $http.get(BASE + '/api/settings').then(function (resp) {
+    $scope.settings = resp.data;
+  }, function () {
+    $scope.settingsError = 'Settings could not be loaded. Reload the page to retry.';
+  });
   $scope.refresh();
 }]);
 JS
@@ -582,11 +606,39 @@ JS
     <button class="btn btn-danger" ng:click="service('stop', true)" ng:disabled="busy || !status || status.state != 'connected'">
         <i class="fa fa-stop"></i> Stop tunnel
     </button>
+
+    <section class="frigotehnica-settings">
+        <h3>Site and automatic updates</h3>
+        <div class="alert alert-danger" ng:if="settingsError" role="alert">{{settingsError}}</div>
+        <div class="alert alert-success" ng:if="settingsMessage" role="status">{{settingsMessage}}</div>
+        <p ng:if="!settings && !settingsError">Loading settings…</p>
+        <form name="siteSettingsForm" ng:if="settings" ng:submit="saveSettings()">
+            <div class="form-group">
+                <label for="frigotehnica-site-name">Site name</label>
+                <input id="frigotehnica-site-name" type="text" ng:model="settings.siteName" class="form-control" maxlength="100" required/>
+            </div>
+            <div class="form-group">
+                <label for="frigotehnica-hostname">Public hostname</label>
+                <input id="frigotehnica-hostname" type="text" ng:model="settings.hostname" class="form-control" maxlength="253" placeholder="boss.example.com"/>
+                <p class="help-block">Display setting. Configure the matching route in Cloudflare.</p>
+            </div>
+            <div class="form-group">
+                <label for="frigotehnica-update-interval">Check for cloudflared updates every (hours)</label>
+                <input id="frigotehnica-update-interval" type="number" ng:model="settings.intervalHours" class="form-control" min="1" max="8760" step="1" required/>
+                <p class="help-block">24 = daily; 168 = weekly. Updates restart an active tunnel.</p>
+            </div>
+            <div class="checkbox">
+                <label for="frigotehnica-auto-update"><input id="frigotehnica-auto-update" type="checkbox" ng:model="settings.autoUpdateEnabled"/> Enable automatic cloudflared updates</label>
+            </div>
+            <button type="submit" class="btn btn-primary" ng:disabled="settingsBusy || siteSettingsForm.$invalid">{{settingsBusy ? 'Saving…' : 'Save settings'}}</button>
+        </form>
+    </section>
 </div>
 HTML
 	cat > "$plugin_stage/resources/style.css" <<'CSS'
 .frigotehnica-tunnel{max-width:720px}
 .frigotehnica-token-group{margin-top:20px}
+.frigotehnica-settings{margin-top:30px;padding-top:20px;border-top:1px solid #ddd}.frigotehnica-settings h3{margin-top:0}.frigotehnica-settings .form-group{margin-bottom:18px}.frigotehnica-settings .help-block{font-size:12px}.frigotehnica-settings .checkbox{margin-bottom:18px}
 CSS
 	# Prebuilt bundles: CAREL serves 'resources/build/all.*' directly and
 	# inlines plugin.yml HTML resources into all.partials.js. Plain JS/CSS

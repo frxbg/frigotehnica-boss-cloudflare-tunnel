@@ -6,6 +6,11 @@ All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
 ### Added
 
+- Added a persistent Site and automatic updates form at the bottom of both the
+  native CAREL Ajenti view and standalone UI: site name, displayed hostname,
+  update interval, and automatic-update enable/disable.
+- Added authenticated settings endpoints, input validation, service activation,
+  rollback on service-configuration failure, and upgrade-persistence tests.
 - Added a separate OpenRC service for periodic cloudflared updates, enabled
   every 24 hours by default, with configurable intervals, on-demand updates,
   check-only mode, saved status, and enable/disable controls.
@@ -20,6 +25,11 @@ All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
 ### Changed
 
+- Rewrote the complete README around the current install/configure/update/remove
+  workflow, removing obsolete release-specific command blocks and the appended
+  command matrix. Exact legacy commands are generated per release.
+- Documented the observed local-device file chooser failure during tunneled
+  BOSS access, without claiming an unverified network fix.
 - Preserved the latest-stable cloudflared packaging introduced in v1.3.7.
 - Pinned installer asset URLs to their own release tag instead of a mutable
   latest URL, including checksum verification of the update helper.
