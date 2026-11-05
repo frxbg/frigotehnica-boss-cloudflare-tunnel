@@ -105,3 +105,16 @@ jobs:
             SHA256SUMS
             COMMANDS.md
             README.md
+      - name: Synchronize and verify published release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+          gh release view "$GITHUB_REF_NAME" --json body --jq '.body' > published-notes.md
+          python3 - <<'PY'
+          from pathlib import Path
+          expected = Path('release-notes.md').read_text(encoding='utf-8').strip()
+          actual = Path('published-notes.md').read_text(encoding='utf-8').strip()
+          if actual != expected:
+              raise SystemExit('Published release notes differ from generated notes')
+          PY
