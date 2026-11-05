@@ -4,6 +4,8 @@ All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-05
+
 ### Added
 
 - Added a persistent Site and automatic updates form at the bottom of both the
@@ -28,8 +30,9 @@ All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 - Rewrote the complete README around the current install/configure/update/remove
   workflow, removing obsolete release-specific command blocks and the appended
   command matrix. Exact legacy commands are generated per release.
-- Documented the observed local-device file chooser failure during tunneled
-  BOSS access, without claiming an unverified network fix.
+- Documented and verified the BOSS browser file chooser repair using the
+  device's LAN HTTPS origin and its public HTTP Host header, without changing
+  BOSS application files or importing a configuration archive.
 - Preserved the latest-stable cloudflared packaging introduced in v1.3.7.
 - Pinned installer asset URLs to their own release tag instead of a mutable
   latest URL, including checksum verification of the update helper.
@@ -179,3 +182,4 @@ Changes since `v1.2.2-rc2`:
 [1.3.3]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.2...v1.3.3
 [1.3.4]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.3...v1.3.4
 [1.3.5]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.4...v1.3.5
+[1.4.0]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.7...v1.4.0
