@@ -36,6 +36,7 @@ AJENTI_VARIANT=generic
 PLUGIN_ONLY=no
 AUTO_UPDATE_HOURS=
 AUTO_UPDATE_ENABLED=
+KEEP_CLOUDFLARED=no
 
 usage() {
 	cat <<'EOF'
@@ -294,6 +295,21 @@ if [ "$PLUGIN_ONLY" != yes ]; then
 	verify_asset "$STAGE_DIR/update.sh" "$UPDATE_SCRIPT_SHA256"
 	chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
 	info "Release asset checksums verified"
+	# A periodic upstream update may be newer than this project release bundle.
+	# Keep that installed version during a later UI/plugin upgrade.
+	if [ -x "$CLOUDFLARED_BINARY" ]; then
+		installed_version=$("$CLOUDFLARED_BINARY" --version 2>/dev/null | awk '$2=="version" {print $3; exit}' || true)
+		bundled_version=$("$STAGE_DIR/$CLOUDFLARED_ASSET" --version 2>/dev/null | awk '$2=="version" {print $3; exit}' || true)
+		if awk -v old="$installed_version" -v new="$bundled_version" 'BEGIN {
+			if (old !~ /^[0-9]+\.[0-9]+\.[0-9]+$/ || new !~ /^[0-9]+\.[0-9]+\.[0-9]+$/) exit 1;
+			split(old,a,"."); split(new,b,".");
+			for(i=1;i<=3;i++) { if(a[i]+0>b[i]+0) exit 0; if(a[i]+0<b[i]+0) exit 1; }
+			exit 1;
+		}'; then
+			KEEP_CLOUDFLARED=yes
+			info "Keeping newer installed cloudflared $installed_version (bundle: $bundled_version)"
+		fi
+	fi
 fi
 
 stage_ajenti_plugin() {
@@ -848,7 +864,9 @@ if rc-service "$UI_SERVICE" status >/dev/null 2>&1; then rc-service "$UI_SERVICE
 if rc-service "$TUNNEL_SERVICE" status >/dev/null 2>&1; then rc-service "$TUNNEL_SERVICE" stop; fi
 
 install -m 0755 "$STAGE_DIR/$UI_ASSET" "$UI_BINARY"
-install -m 0755 "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_BINARY"
+if [ "$KEEP_CLOUDFLARED" != yes ]; then
+	install -m 0755 "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_BINARY"
+fi
 install -m 0755 "$STAGE_DIR/update.sh" "$APP_DIR/update.sh"
 
 cat > "$STAGE_DIR/$UPDATE_SERVICE" <<'EOF'
