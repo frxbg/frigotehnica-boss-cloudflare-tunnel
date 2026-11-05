@@ -150,18 +150,23 @@ In the tunnel’s published application route, configure:
 | Public hostname | Your public BOSS hostname, for example boss.example.com. |
 | Path | Leave empty to route the entire hostname, including APIs and upload endpoints. |
 | Service type | HTTPS |
-| Service URL | 127.0.0.1:443 |
+| Service URL | The BOSS device's LAN address and HTTPS port, for example 192.168.1.20:443. |
 | No TLS Verify | Enable only when using the BOSS self-signed origin certificate. |
-| HTTP Host Header | Leave unset unless a specific BOSS origin configuration requires an override. |
+| HTTP Host Header | Your public BOSS hostname, for example boss.example.com, without a protocol, port, or path. |
 
-Use the local HTTPS service as the origin. The service address is not the
-public hostname and does not include /boss/. Users may open /boss/ in their
-browser, while other application endpoints can use different paths on the same host.
+Use the device's LAN HTTPS service as the origin and keep its address stable.
+The service address is not the public hostname and does not include /boss/.
+Users may open /boss/ in their browser, while other application endpoints can
+use different paths on the same host.
 
-![Cloudflare route to the local BOSS HTTPS service](docs/images/Published-application-routes.png)
+When cloudflared runs on BOSS itself, an origin of 127.0.0.1 can cause BOSS to
+select its local-device file dialog instead of a browser file chooser. The
+inspected BOSS firmware explicitly checks for a loopback client address.
+Use the LAN origin and public Host header, then verify the file chooser as
+described under [upload troubleshooting](#boss-uploads-do-not-work-through-the-public-hostname).
 
 Prefer a verified origin certificate when available. With a default self-signed
-BOSS certificate on the loopback connection, No TLS Verify affects only the
+BOSS certificate on the origin connection, No TLS Verify affects only the
 cloudflared-to-BOSS TLS check. It does not disable the public HTTPS certificate.
 See [origin parameters](https://developers.cloudflare.com/tunnel/advanced/origin-parameters/)
 and [HTTPS origin troubleshooting](https://developers.cloudflare.com/tunnel/troubleshooting/https-origins/).
@@ -372,12 +377,36 @@ rendered `fdLocal=true` and a read-only filename field instead of a browser
 file input. Its JavaScript entered the local-device file dialog, so the upload
 button stayed disabled because no suitable file could be selected.
 
-Check whether the BOSS origin classifies the tunnel's loopback connection as a
-local-console session. This is a likely cause when cloudflared connects to
-127.0.0.1, but it must be verified against the device and tunnel route. A
-controlled comparison with the device's LAN origin address, or an appropriate
-trusted-proxy configuration supported by BOSS, can establish the cause.
-Do not restore a configuration archive merely to test the file chooser.
+For the site-configuration import screen, compare the server-rendered form:
+
+| Field | Working browser upload | Observed local-device dialog |
+| --- | --- | --- |
+| `fdLocal` | `false` | `true` |
+| `#sitebacupload` | Enabled `type="file"` input | Read-only `type="text"` input |
+| `#uploadfrm5` encoding | `multipart/form-data` | `application/x-www-form-urlencoded` |
+
+The compared installations served identical `FileDialog.js` and `system.js`
+files. The difference was in the server-generated flags and form markup.
+On the inspected firmware, `FileDialogBean.isLocal(HttpServletRequest)` checks
+the client address, client hostname, and server name. In normal operation it
+selects local mode for a client address of `127.0.0.1`, a client hostname of
+`127.0.0.1`, a server name of `localhost`, or matching client and server names.
+Changing the Host header alone cannot override the explicit loopback check.
+
+For a tunnel connector running on BOSS, test the following published route:
+
+1. Set the HTTPS service URL to that BOSS device's LAN address and port 443.
+2. Set **HTTP Host Header** to its public hostname, without a protocol or path.
+3. Save the route and sign in again through the public hostname. Reload the
+   site-configuration import screen and compare its form with the table above.
+4. Open the browser file chooser and cancel it to verify file selection safely.
+   Do not restore a configuration archive merely to test the chooser.
+
+The LAN-origin route still needs verification on each affected installation;
+firmware customizations and forwarded-request handling can change the result.
+If local mode remains, inspect those settings and the addresses BOSS actually
+receives. Changing only `fdLocal` in the browser does not replace the already
+rendered form and is not a persistent repair.
 
 For request-address issues, inspect the browser Network and Console panels.
 Check that the published route covers the whole hostname, not only /boss/.
@@ -388,7 +417,8 @@ targets the client’s network, not the remote BOSS through the tunnel.
 Check redirects and the Host header if BOSS generates a different address.
 Cloudflare’s httpHostHeader option changes the request Host sent to the local
 service; it does not rewrite absolute URLs already generated in the browser.
-Use an override only after identifying what the origin requires. See
+The public Host header above also prevents a matching local server name from
+selecting local mode on the inspected firmware. See
 [Cloudflare origin parameters](https://developers.cloudflare.com/tunnel/advanced/origin-parameters/).
 The Site settings hostname field alone does not change BOSS upload behavior.
 
