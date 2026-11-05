@@ -82,6 +82,11 @@ type statusResponse struct {
 
 func main() {
 	var cfg config
+	var updates updateOptions
+	flag.StringVar(&updates.configPath, "update-config", "/opt/frigotehnica/config/updates.json", "automatic update configuration")
+	flag.IntVar(&updates.hours, "update-interval-hours", 24, "update check interval in hours (1-8760)")
+	flag.BoolVar(&updates.enabled, "update-enabled", true, "enable scheduled cloudflared updates")
+	flag.BoolVar(&updates.legacyCA, "update-legacy-ca", false, "allow unverified TLS for update downloads")
 	flag.StringVar(&cfg.listen, "listen", "127.0.0.1:9080", "listen address")
 	flag.StringVar(&cfg.authFile, "auth-file", "/opt/frigotehnica/config/admin.auth", "admin password hash file")
 	flag.StringVar(&cfg.bootstrapFile, "bootstrap-file", "/opt/frigotehnica/config/bootstrap.required", "one-time password marker file")
@@ -96,6 +101,12 @@ func main() {
 	flag.BoolVar(&cfg.demoBootstrap, "demo-bootstrap", false, "show forced password setup in demo mode")
 	flag.BoolVar(&cfg.demoAjenti, "demo-ajenti", false, "simulate Ajenti authentication in demo mode")
 	flag.Parse()
+	if handled, err := updates.command(cfg, flag.Args()); handled {
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	if flag.NArg() == 1 && flag.Arg(0) == "generate-password" {
 		password, err := randomHex(12)

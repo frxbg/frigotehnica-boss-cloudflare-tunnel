@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+description="Periodic verified cloudflared updates for Frigotehnica BOSS"
+command="/opt/frigotehnica/frigotehnica-tunnel-ui"
+command_args="-update-config /opt/frigotehnica/config/updates.json update-loop"
+command_background=true
+pidfile="/var/run/frigotehnica-cloudflared-update.pid"
+output_log="/opt/frigotehnica/logs/cloudflared-update.log"
+error_log="/opt/frigotehnica/logs/cloudflared-update.log"
+retry="TERM/60/KILL/5"
+depend() { use logger; after localmount net cloudflared-frigotehnica; }
+start_pre() {
+	[ -x "$command" ] || { eerror "Missing Tunnel Control binary"; return 1; }
+	[ -s /opt/frigotehnica/config/updates.json ] || { eerror "Missing update configuration"; return 1; }
+	touch "$output_log" && chmod 0600 "$output_log"
+}

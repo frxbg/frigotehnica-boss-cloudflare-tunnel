@@ -22,6 +22,13 @@
 
 Current release: `v1.3.7`
 
+<!-- unreleased:start -->
+The periodic updater described below is prepared for the next release.
+<!-- unreleased:end -->
+Release-specific commands and exact checksums are published automatically as
+[COMMANDS.md](https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/COMMANDS.md)
+and in the release description starting with that release.
+
 <details>
   <summary>Table of contents</summary>
   <ol>
@@ -92,6 +99,10 @@ endorsed by CAREL or Cloudflare.
 - Non-interactive bootstrap for restricted browser terminals.
 - OpenRC boot services, upgrade backups, and safe uninstall.
 - Separate Ajenti plugin-only update mode.
+- Periodic cloudflared update service, configurable from 1 to 8760 hours.
+- Verified upstream downloads, atomic replacement, and rollback on a failed restart.
+- Automatically generated install/update/uninstall commands for curl, Micro wget,
+  and both legacy-CA variants on every release.
 
 ### Architecture support
 
@@ -117,6 +128,30 @@ variants are built and published by the release workflow.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Getting started
+
+### Command reference
+
+The following commands use the latest project release and normal HTTPS
+certificate verification. The `curl` examples use `sudo`; the **Micro/wget**
+examples are intended for a root terminal (add `sudo` before `sh` otherwise).
+
+| Action | curl + sudo | Micro: wget, root terminal |
+| --- | --- | --- |
+| Install with Ajenti | `curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh -o /tmp/frigotehnica-install.sh && sudo sh /tmp/frigotehnica-install.sh --non-interactive --ajenti` | `wget -qO /tmp/frigotehnica-install.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh && sh /tmp/frigotehnica-install.sh --non-interactive --ajenti` |
+| Update complete project | Use the install command again. | Use the install command again. |
+| Update cloudflared only | `curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/update.sh -o /tmp/frigotehnica-update.sh && sudo sh /tmp/frigotehnica-update.sh` | `wget -qO /tmp/frigotehnica-update.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/update.sh && sh /tmp/frigotehnica-update.sh` |
+| Uninstall | `curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/uninstall.sh -o /tmp/frigotehnica-uninstall.sh && sudo sh /tmp/frigotehnica-uninstall.sh` | `wget -qO /tmp/frigotehnica-uninstall.sh https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/uninstall.sh && sh /tmp/frigotehnica-uninstall.sh` |
+
+For **legacy CA** devices, use the corresponding curl or wget commands from the
+release's **COMMANDS.md** attachment or release description. They contain the
+exact tag and final script SHA-256, and cover install, complete project update,
+cloudflared-only update, plugin-only update, and uninstall. The release workflow
+regenerates these commands after pinning all downloaded binaries and scripts,
+so no manual checksum editing is needed when publishing a new version.
+
+Each release also includes a rendered `README.md` attachment with those exact
+commands. The installer resolves assets against its own release tag, avoiding
+mixed versions if a newer release appears during installation.
 
 ### Prerequisites
 
@@ -206,9 +241,12 @@ Some older CAREL BOSS systems cannot validate GitHub's HTTPS certificate
 because their CA bundle is outdated. Never pipe an unverified download directly
 into a root shell.
 
+For existing `v1.3.7` installations, the following pinned commands remain available.
+For the next and later releases use the generated **COMMANDS.md** attachment,
+which supplies separate install, uninstall, and update commands for both tools.
+
 The following `v1.3.7` command downloads the installer with legacy TLS mode,
-verifies its exact pinned SHA-256 digest, and only then executes it. The verified
-installer also checks the downloaded program binaries:
+verifies its exact pinned SHA-256 digest, and only then executes it:
 
 ```sh
 curl -kfsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7/install.sh -o /tmp/frigotehnica-install-v1.3.7.sh && echo 'f1a180cef3206bfc43158a5339564968214c98d08ae4a342b4c39496df2a4255  /tmp/frigotehnica-install-v1.3.7.sh' | sha256sum -c - && sudo env FRIGOTEHNICA_INSECURE_DOWNLOADS=yes sh /tmp/frigotehnica-install-v1.3.7.sh --release-base-url https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/v1.3.7 --non-interactive --ajenti
@@ -396,7 +434,68 @@ sudo rc-service cloudflared-frigotehnica restart
 
 sudo rc-service frigotehnica-tunnel-ui status
 sudo rc-service frigotehnica-tunnel-ui restart
+
+sudo rc-service frigotehnica-cloudflared-update status
+sudo rc-service frigotehnica-cloudflared-update restart
 ```
+
+### Automatic cloudflared updates
+
+The installer enables `frigotehnica-cloudflared-update` by default with a
+24-hour interval. It runs independently of the tunnel, without cron, curl,
+wget, Python, or an open port. After a two-minute initial boot delay it checks
+the official Cloudflare GitHub **latest stable** release. A persisted last-check
+time prevents extra checks whenever the service is restarted. Configuration is
+reread every minute; errors are logged and retried at the next scheduled check.
+
+Only a numerically newer version is installed. The updater chooses ARMv7
+hard-float or amd64, verifies the official asset size, SHA-256, ELF architecture,
+and executable version before atomically replacing the binary. It keeps
+`/opt/frigotehnica/cloudflared.previous`, restarts a running tunnel, and restores
+the old binary if service startup fails. A stopped tunnel remains stopped.
+The updater changes neither the token nor Ajenti or UI passwords.
+
+Run these commands as root (or prefix them with `sudo`):
+
+```sh
+# Check availability without installation or service restart.
+sh /opt/frigotehnica/update.sh --check
+
+# Install the newest stable cloudflared now, if newer.
+sh /opt/frigotehnica/update.sh
+
+# Read the configured schedule and most recent scheduled/manual update result.
+sh /opt/frigotehnica/update.sh --status
+
+# Enable checks every 48 hours; use 168 for weekly checks.
+sh /opt/frigotehnica/update.sh --interval 48 --enable
+
+# Disable the update service and remove it from the boot runlevel.
+sh /opt/frigotehnica/update.sh --disable
+```
+
+Installation options: `--auto-update-hours 48`, `--enable-auto-update`, or
+`--no-auto-update`. Existing schedule settings are retained unless explicitly
+overridden. Plugin-only updates do not change the updater or its configuration.
+
+An installation in explicit legacy-CA mode configures legacy downloads for a
+new updater configuration as well. SHA-256 still detects a corrupt download,
+but upstream metadata fetched with TLS verification disabled is not
+authenticated. After fixing the device CA bundle, restore strict verification:
+
+```sh
+sh /opt/frigotehnica/update.sh --strict-ca
+```
+
+The updater reads `/opt/frigotehnica/config/updates.json`; its last result is
+stored beside it in `updates.json.status`. Logs are in
+`/opt/frigotehnica/logs/cloudflared-update.log`. Updates briefly interrupt an
+active tunnel while restarting it. Rollback verifies OpenRC process startup,
+not end-to-end Cloudflare connectivity.
+
+Cloudflare also documents its [binary update command](https://developers.cloudflare.com/tunnel/guides/update-cloudflared/).
+This project keeps built-in self-updates disabled so OpenRC and the periodic
+updater control replacement and restart together.
 
 ### Uninstall
 
@@ -414,12 +513,17 @@ data loss. Review `/opt/frigotehnica` before removing retained data manually.
 ```text
 /opt/frigotehnica/cloudflared
 /opt/frigotehnica/frigotehnica-tunnel-ui
+/opt/frigotehnica/update.sh
+/opt/frigotehnica/cloudflared.previous
+/opt/frigotehnica/config/updates.json
+/opt/frigotehnica/config/updates.json.status
 /opt/frigotehnica/config/tunnel.token
 /opt/frigotehnica/config/admin.auth
 /opt/frigotehnica/config/ajenti-proxy.secret
 /opt/frigotehnica/logs/
 /etc/init.d/cloudflared-frigotehnica
 /etc/init.d/frigotehnica-tunnel-ui
+/etc/init.d/frigotehnica-cloudflared-update
 ```
 
 Depending on the detected Ajenti variant, one of these plugin directories is

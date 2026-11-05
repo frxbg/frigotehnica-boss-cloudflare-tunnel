@@ -17,7 +17,11 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Test
-        run: go test ./...
+        run: |
+          go test ./...
+          go vet ./...
+          for script in install.sh update.sh uninstall.sh deploy/frigotehnica-cloudflared-update; do sh -n "$script"; done
+          python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Build ARMv7 UI
         env:
           CGO_ENABLED: "0"
@@ -60,13 +64,16 @@ jobs:
           done
       - name: Normalize script line endings
         run: |
-          sed -i 's/\r$//' install.sh uninstall.sh
+          sed -i 's/\r$//' install.sh update.sh uninstall.sh
       - name: Pin installer checksum to this build
         run: |
           arm_sha=$(sha256sum frigotehnica-tunnel-ui-linux-armv7 | awk '{print $1}')
           amd64_sha=$(sha256sum frigotehnica-tunnel-ui-linux-amd64 | awk '{print $1}')
           sed -i "s/^UI_ARMV7_SHA256=.*/UI_ARMV7_SHA256=$arm_sha/" install.sh
           sed -i "s/^UI_AMD64_SHA256=.*/UI_AMD64_SHA256=$amd64_sha/" install.sh
+          update_sha=$(sha256sum update.sh | awk '{print $1}')
+          sed -i "s/^UPDATE_SCRIPT_SHA256=.*/UPDATE_SCRIPT_SHA256=$update_sha/" install.sh
+          sed -i "s/^RELEASE_VERSION=.*/RELEASE_VERSION=${GITHUB_REF_NAME}/" install.sh
       - name: Checksums
         run: |
           sha256sum \
@@ -74,14 +81,25 @@ jobs:
             frigotehnica-tunnel-ui-linux-amd64 \
             cloudflared-linux-armhf \
             cloudflared-linux-amd64 \
-            install.sh uninstall.sh > SHA256SUMS
+            install.sh update.sh uninstall.sh > SHA256SUMS
+      - name: Generate per-release install, update, and uninstall commands
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json body --jq '.body' > release-notes.md || true
+          python3 scripts/release_commands.py --tag "$GITHUB_REF_NAME"
+          cat COMMANDS.md >> "$GITHUB_STEP_SUMMARY"
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           files: |
             frigotehnica-tunnel-ui-linux-armv7
             frigotehnica-tunnel-ui-linux-amd64
             cloudflared-linux-armhf
             cloudflared-linux-amd64
             install.sh
+            update.sh
             uninstall.sh
             SHA256SUMS
+            COMMANDS.md
+            README.md

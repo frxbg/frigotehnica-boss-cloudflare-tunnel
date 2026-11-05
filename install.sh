@@ -8,11 +8,15 @@ UI_BINARY=$APP_DIR/frigotehnica-tunnel-ui
 CLOUDFLARED_BINARY=$APP_DIR/cloudflared
 TUNNEL_SERVICE=cloudflared-frigotehnica
 UI_SERVICE=frigotehnica-tunnel-ui
+UPDATE_SERVICE=frigotehnica-cloudflared-update
+UPDATE_SCRIPT_SHA256=PINNED_BY_RELEASE_WORKFLOW
+RELEASE_VERSION=PINNED_BY_RELEASE_WORKFLOW
 UI_ARMV7_SHA256=a492ed5a5c136addce780806ae1fa8cd95b734f0c527029f604e51fa02839628
 UI_AMD64_SHA256=PINNED_BY_RELEASE_WORKFLOW
 CLOUDFLARED_ARMV7_SHA256=8e17268b7033061f505cd560eeafb04fdf020a354c975d1f0197bb63e9d0e0e5
 CLOUDFLARED_AMD64_SHA256=fcfb02b575a52ca1af2e3267af4e1517bcdeb30ac48c834c69abaed3c0576ad2
 RELEASE_BASE_URL=${FRIGOTEHNICA_RELEASE_BASE_URL:-https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download}
+RELEASE_BASE_CUSTOM=${FRIGOTEHNICA_RELEASE_BASE_URL:-}
 LISTEN_ADDRESS=
 SITE_NAME="BOSS Site"
 PUBLIC_HOSTNAME="not-configured"
@@ -30,6 +34,8 @@ AJENTI_PLUGIN_DIR=
 AJENTI_SERVICE=
 AJENTI_VARIANT=generic
 PLUGIN_ONLY=no
+AUTO_UPDATE_HOURS=
+AUTO_UPDATE_ENABLED=
 
 usage() {
 	cat <<'EOF'
@@ -50,6 +56,9 @@ Options:
   --release-base-url URL   Download missing release assets from URL
   --no-enable              Do not add services to the OpenRC default runlevel
   --no-start               Install files without starting services
+  --auto-update-hours N    Check for cloudflared updates every N hours (default: 24)
+  --no-auto-update         Disable the periodic cloudflared updater
+  --enable-auto-update     Enable the periodic cloudflared updater
   --help                   Show this help
 
 Secrets are never accepted as command-line arguments. In non-interactive mode,
@@ -70,13 +79,25 @@ while [ "$#" -gt 0 ]; do
 		--ajenti) AJENTI_MODE=yes; shift ;;
 		--plugin-only) PLUGIN_ONLY=yes; AJENTI_MODE=yes; shift ;;
 		--no-ajenti) AJENTI_MODE=no; shift ;;
-		--release-base-url) [ "$#" -ge 2 ] || die "--release-base-url requires a value"; RELEASE_BASE_URL=${2%/}; shift 2 ;;
+		--release-base-url) [ "$#" -ge 2 ] || die "--release-base-url requires a value"; RELEASE_BASE_URL=${2%/}; RELEASE_BASE_CUSTOM=yes; shift 2 ;;
 		--no-enable) ENABLE_BOOT=no; shift ;;
 		--no-start) START_SERVICES=no; shift ;;
+		--auto-update-hours) [ "$#" -ge 2 ] || die "--auto-update-hours requires hours"; AUTO_UPDATE_HOURS=$2; shift 2 ;;
+		--no-auto-update) AUTO_UPDATE_ENABLED=false; shift ;;
+		--enable-auto-update) AUTO_UPDATE_ENABLED=true; shift ;;
 		--help|-h) usage; exit 0 ;;
 		*) die "unknown option: $1" ;;
 	esac
 done
+
+if [ -n "$AUTO_UPDATE_HOURS" ]; then
+	case "$AUTO_UPDATE_HOURS" in *[!0-9]*|0) die "update interval must be 1-8760 hours" ;; esac
+	[ "$AUTO_UPDATE_HOURS" -ge 1 ] && [ "$AUTO_UPDATE_HOURS" -le 8760 ] || die "update interval must be 1-8760 hours"
+fi
+# Resolve release assets against the same tag as the verified installer.
+if [ -z "$RELEASE_BASE_CUSTOM" ] && [ "$RELEASE_VERSION" != PINNED_BY_RELEASE_WORKFLOW ]; then
+	RELEASE_BASE_URL=https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/download/$RELEASE_VERSION
+fi
 
 [ "$(id -u)" -eq 0 ] || die "run this installer as root"
 case "$(uname -m)" in
@@ -267,8 +288,10 @@ verify_asset() {
 if [ "$PLUGIN_ONLY" != yes ]; then
 	fetch_asset "$UI_ASSET" "$STAGE_DIR/$UI_ASSET"
 	fetch_asset "$CLOUDFLARED_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
+	fetch_asset update.sh "$STAGE_DIR/update.sh"
 	verify_asset "$STAGE_DIR/$UI_ASSET" "$UI_SHA256"
 	verify_asset "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_SHA256"
+	verify_asset "$STAGE_DIR/update.sh" "$UPDATE_SCRIPT_SHA256"
 	chmod 0755 "$STAGE_DIR/$UI_ASSET" "$STAGE_DIR/$CLOUDFLARED_ASSET"
 	info "Release asset checksums verified"
 fi
@@ -726,6 +749,8 @@ if [ -e "$UI_BINARY" ] || [ -e /etc/init.d/$UI_SERVICE ] || [ -e /etc/init.d/$TU
 	[ -e "$UI_BINARY" ] && cp -p "$UI_BINARY" "$BACKUP_DIR/"
 	[ -e /etc/init.d/$UI_SERVICE ] && cp -p /etc/init.d/$UI_SERVICE "$BACKUP_DIR/"
 	[ -e /etc/init.d/$TUNNEL_SERVICE ] && cp -p /etc/init.d/$TUNNEL_SERVICE "$BACKUP_DIR/"
+	[ ! -e /etc/init.d/$UPDATE_SERVICE ] || cp -p /etc/init.d/$UPDATE_SERVICE "$BACKUP_DIR/"
+	[ ! -e "$CLOUDFLARED_BINARY" ] || cp -p "$CLOUDFLARED_BINARY" "$BACKUP_DIR/"
 	[ "$AJENTI_ENABLED" = yes ] && [ -d "$AJENTI_PLUGIN_DIR" ] && cp -Rp "$AJENTI_PLUGIN_DIR" "$BACKUP_DIR/"
 	info "Existing program files backed up to $BACKUP_DIR"
 fi
@@ -818,11 +843,39 @@ start_pre() {
 }
 EOF
 
+if rc-service "$UPDATE_SERVICE" status >/dev/null 2>&1; then rc-service "$UPDATE_SERVICE" stop; fi
 if rc-service "$UI_SERVICE" status >/dev/null 2>&1; then rc-service "$UI_SERVICE" stop; fi
 if rc-service "$TUNNEL_SERVICE" status >/dev/null 2>&1; then rc-service "$TUNNEL_SERVICE" stop; fi
 
 install -m 0755 "$STAGE_DIR/$UI_ASSET" "$UI_BINARY"
 install -m 0755 "$STAGE_DIR/$CLOUDFLARED_ASSET" "$CLOUDFLARED_BINARY"
+install -m 0755 "$STAGE_DIR/update.sh" "$APP_DIR/update.sh"
+
+cat > "$STAGE_DIR/$UPDATE_SERVICE" <<'EOF'
+#!/sbin/openrc-run
+description="Periodic verified cloudflared updates for Frigotehnica BOSS"
+command="/opt/frigotehnica/frigotehnica-tunnel-ui"
+command_args="-update-config /opt/frigotehnica/config/updates.json update-loop"
+command_background=true
+pidfile="/var/run/frigotehnica-cloudflared-update.pid"
+output_log="/opt/frigotehnica/logs/cloudflared-update.log"
+error_log="/opt/frigotehnica/logs/cloudflared-update.log"
+retry="TERM/60/KILL/5"
+depend() { use logger; after localmount net cloudflared-frigotehnica; }
+start_pre() {
+	[ -x "$command" ] || { eerror "Missing Tunnel Control binary"; return 1; }
+	[ -s /opt/frigotehnica/config/updates.json ] || { eerror "Missing update configuration"; return 1; }
+	touch "$output_log" && chmod 0600 "$output_log"
+}
+EOF
+install -m 0755 "$STAGE_DIR/$UPDATE_SERVICE" /etc/init.d/$UPDATE_SERVICE
+set -- -update-config "$CONFIG_DIR/updates.json"
+[ -z "$AUTO_UPDATE_HOURS" ] || set -- "$@" -update-interval-hours "$AUTO_UPDATE_HOURS"
+[ -z "$AUTO_UPDATE_ENABLED" ] || set -- "$@" "-update-enabled=$AUTO_UPDATE_ENABLED"
+if [ ! -e "$CONFIG_DIR/updates.json" ] && [ "$INSECURE_DOWNLOADS" = yes ]; then
+	set -- "$@" -update-legacy-ca=true
+fi
+"$UI_BINARY" "$@" configure-updates
 if [ -s "$STAGE_DIR/tunnel.token" ]; then
 	install -m 0600 "$STAGE_DIR/tunnel.token" "$CONFIG_DIR/tunnel.token"
 fi
@@ -853,6 +906,11 @@ install -m 0755 "$STAGE_DIR/$UI_SERVICE" /etc/init.d/$UI_SERVICE
 if [ "$ENABLE_BOOT" = yes ]; then
 	rc-update add "$TUNNEL_SERVICE" default >/dev/null
 	rc-update add "$UI_SERVICE" default >/dev/null
+	if grep -q '"enabled": true' "$CONFIG_DIR/updates.json"; then
+		rc-update add "$UPDATE_SERVICE" default >/dev/null
+	else
+		rc-update del "$UPDATE_SERVICE" default >/dev/null 2>&1 || true
+	fi
 	info "OpenRC boot services enabled"
 fi
 
@@ -867,6 +925,10 @@ if [ "$START_SERVICES" = yes ]; then
 	rc-service "$UI_SERVICE" start
 	sleep 2
 	rc-service "$UI_SERVICE" status >/dev/null 2>&1 || die "UI service did not start"
+	if grep -q '"enabled": true' "$CONFIG_DIR/updates.json"; then
+		rc-service "$UPDATE_SERVICE" start
+		rc-service "$UPDATE_SERVICE" status >/dev/null 2>&1 || die "cloudflared updater service did not start"
+	fi
 	if command -v curl >/dev/null 2>&1; then
 		curl -fsS --max-time 5 "http://$LISTEN_ADDRESS/login" >/dev/null || die "UI health check failed"
 	fi

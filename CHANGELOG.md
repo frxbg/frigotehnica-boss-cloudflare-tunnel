@@ -2,6 +2,30 @@
 
 All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added a separate OpenRC service for periodic cloudflared updates, enabled
+  every 24 hours by default, with configurable intervals, on-demand updates,
+  check-only mode, saved status, and enable/disable controls.
+- Added official upstream release discovery, architecture/size/SHA-256/version
+  checks, atomic replacement, previous-binary backup, and automatic rollback
+  when a running service fails to restart. Stopped tunnels stay stopped.
+- Added automatically generated release command references for install,
+  project update, cloudflared update, plugin-only update, and uninstall in
+  curl, Micro wget, curl legacy-CA, and wget legacy-CA variants.
+- Attached COMMANDS.md and a rendered README to releases and merged the
+  generated command block into release descriptions without duplicating it.
+
+### Changed
+
+- Preserved the latest-stable cloudflared packaging introduced in v1.3.7.
+- Pinned installer asset URLs to their own release tag instead of a mutable
+  latest URL, including checksum verification of the update helper.
+- Uninstall now stops and removes the updater while retaining configuration,
+  logs, and the previous cloudflared binary.
+
 ## [1.3.5] - 2026-08-27
 
 ### Fixed
