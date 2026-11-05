@@ -402,8 +402,11 @@ For a tunnel connector running on BOSS, test the following published route:
 4. Open the browser file chooser and cancel it to verify file selection safely.
    Do not restore a configuration archive merely to test the chooser.
 
-The LAN-origin route still needs verification on each affected installation;
-firmware customizations and forwarded-request handling can change the result.
+In a controlled test, this route changed `fdLocal` from `true` to `false`,
+restored `multipart/form-data`, and opened the browser file chooser without
+changing BOSS application files or importing a configuration archive.
+Verify the route on each affected installation; firmware customizations and
+forwarded-request handling can change the result.
 If local mode remains, inspect those settings and the addresses BOSS actually
 receives. Changing only `fdLocal` in the browser does not replace the already
 rendered form and is not a persistent repair.
