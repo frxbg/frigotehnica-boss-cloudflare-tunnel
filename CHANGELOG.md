@@ -4,6 +4,16 @@ All notable changes to Frigotehnica BOSS Cloudflare Tunnel are documented here.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-05
+
+### Fixed
+
+- Retry transient curl download failures, including GitHub HTTP 502, 503, and
+  504 responses, for release assets and generated bootstrap commands.
+- Retain mandatory pinned SHA-256 verification and the existing strict or
+  explicitly selected legacy-CA mode during retries.
+- Verify that generated command blocks reach published release descriptions.
+
 ## [1.4.0] - 2026-11-05
 
 ### Added
@@ -183,3 +193,4 @@ Changes since `v1.2.2-rc2`:
 [1.3.4]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.3...v1.3.4
 [1.3.5]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.4...v1.3.5
 [1.4.0]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.3.7...v1.4.0
+[1.4.1]: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/compare/v1.4.0...v1.4.1

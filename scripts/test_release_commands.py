@@ -20,6 +20,7 @@ class ReleaseCommandsTest(unittest.TestCase):
                 self.assertIn("releases/download/v1.4.0/"+script, text)
             self.assertIn("wget --no-check-certificate", text)
             self.assertIn("curl -kfsSL", text)
+            self.assertEqual(text.count("--retry 5 --retry-delay 2 --retry-max-time 180"), len(ACTIONS)*2)
             self.assertIn("--legacy-ca && sh", text)
 
     def test_rerun_replaces_generated_notes_and_preserves_manual_text(self):

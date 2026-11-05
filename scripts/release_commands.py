@@ -21,7 +21,7 @@ def command(tag, script, args, digest, downloader="curl", legacy=False):
     url = "%s/releases/download/%s/%s" % (REPO, tag, script)
     path = "/tmp/frigotehnica-%s-%s" % (tag, script)
     if downloader == "curl":
-        fetch = "curl %sfsSL %s -o %s" % ("-k" if legacy else "-", url, path)
+        fetch = "curl %sfsSL --retry 5 --retry-delay 2 --retry-max-time 180 %s -o %s" % ("-k" if legacy else "-", url, path)
         run = "sudo "
     else:
         fetch = "wget %s-qO %s %s" % ("--no-check-certificate " if legacy else "", path, url)

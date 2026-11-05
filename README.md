@@ -50,7 +50,7 @@ through the management page afterwards.
 ### BOSS: curl
 
 ```sh
-curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh -o /tmp/frigotehnica-install.sh && sudo sh /tmp/frigotehnica-install.sh --non-interactive --ajenti
+curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 180 https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh -o /tmp/frigotehnica-install.sh && sudo sh /tmp/frigotehnica-install.sh --non-interactive --ajenti
 ```
 
 ### BOSS Micro: wget
@@ -209,7 +209,7 @@ Or download the helper from the latest project release:
 BOSS: curl
 
 ```sh
-curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/update.sh -o /tmp/frigotehnica-update.sh && sudo sh /tmp/frigotehnica-update.sh
+curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 180 https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/update.sh -o /tmp/frigotehnica-update.sh && sudo sh /tmp/frigotehnica-update.sh
 ```
 
 BOSS Micro: wget
@@ -228,7 +228,7 @@ replacing. New backend API features require a full project update.
 BOSS: curl
 
 ```sh
-curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh -o /tmp/frigotehnica-install.sh && sudo sh /tmp/frigotehnica-install.sh --plugin-only
+curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 180 https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/install.sh -o /tmp/frigotehnica-install.sh && sudo sh /tmp/frigotehnica-install.sh --plugin-only
 ```
 
 BOSS Micro: wget
@@ -261,7 +261,7 @@ The service retries a failed check at the next configured interval.
 BOSS: curl
 
 ```sh
-curl -fsSL https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/uninstall.sh -o /tmp/frigotehnica-uninstall.sh && sudo sh /tmp/frigotehnica-uninstall.sh
+curl -fsSL --retry 5 --retry-delay 2 --retry-max-time 180 https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel/releases/latest/download/uninstall.sh -o /tmp/frigotehnica-uninstall.sh && sudo sh /tmp/frigotehnica-uninstall.sh
 ```
 
 BOSS Micro: wget
@@ -344,6 +344,16 @@ Ajenti worker receives only the access needed for the authenticated API proxy.
 The UI cannot run arbitrary shell commands. Never commit tokens or passwords.
 
 ## Troubleshooting
+
+### Release downloads return HTTP 502, 503, or 504
+
+These gateway responses can be transient even when the release asset exists.
+The installer and generated curl commands retry transient failures up to five
+times, with a two-second delay and a 180-second retry window. SHA-256 checks
+still apply to the completed download, including in legacy-CA mode.
+
+If all retries fail, rerun the verified install/update command later. An asset
+download failure occurs before installed binaries or services are replaced.
 
 ### Ajenti menu or settings section is missing
 

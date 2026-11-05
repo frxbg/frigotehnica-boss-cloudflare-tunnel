@@ -256,10 +256,12 @@ fetch_asset() {
 		if command -v curl >/dev/null 2>&1; then
 			if [ "$INSECURE_DOWNLOADS" = yes ]; then
 				info "Legacy CA mode: TLS certificate verification is disabled; SHA-256 verification remains mandatory"
-				curl -kfL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+				curl -kfL --retry 5 --retry-delay 2 --retry-max-time 180 \
+					--proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
 					-o "$destination" "$RELEASE_BASE_URL/$asset"
 			else
-				curl -fL --proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
+				curl -fL --retry 5 --retry-delay 2 --retry-max-time 180 \
+					--proto '=https' --tlsv1.2 --connect-timeout 20 --max-time 300 \
 					-o "$destination" "$RELEASE_BASE_URL/$asset"
 			fi
 		elif command -v wget >/dev/null 2>&1; then
@@ -456,7 +458,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.4.0-carel'
+version: '1.4.1-carel'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
@@ -745,7 +747,7 @@ name: frigotehnica
 author: Frigotehnica
 email: office@frigotehnica.com
 url: https://github.com/frxbg/frigotehnica-boss-cloudflare-tunnel
-version: '1.4.0'
+version: '1.4.1'
 title: 'Frigotehnica Cloudflare Tunnel'
 icon: cloud
 dependencies:
