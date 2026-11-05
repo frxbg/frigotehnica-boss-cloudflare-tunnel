@@ -22,3 +22,5 @@ jobs:
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/frigotehnica-amd64 .
           CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o /tmp/frigotehnica-armv7 .
+      - name: Exercise installer in a disposable filesystem tree
+        run: FRIGOTEHNICA_TEST_UI=/tmp/frigotehnica-amd64 python3 -m unittest discover -s scripts -p 'test_*.py'

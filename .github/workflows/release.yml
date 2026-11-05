@@ -22,6 +22,8 @@ jobs:
           go vet ./...
           for script in install.sh update.sh uninstall.sh deploy/frigotehnica-cloudflared-update; do sh -n "$script"; done
           python3 -m unittest discover -s scripts -p 'test_*.py'
+          CGO_ENABLED=0 go build -o /tmp/frigotehnica-native .
+          FRIGOTEHNICA_TEST_UI=/tmp/frigotehnica-native python3 -m unittest discover -s scripts -p 'test_*.py'
       - name: Build ARMv7 UI
         env:
           CGO_ENABLED: "0"
